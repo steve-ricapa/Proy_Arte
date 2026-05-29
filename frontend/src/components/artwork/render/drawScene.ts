@@ -1,5 +1,5 @@
 import p5 from "p5";
-import { InstagramAnalysisPayload, SceneConfig, StarNode } from "../types/artwork.types";
+import { InstagramAnalysisPayload, SceneConfig } from "../types/artwork.types";
 
 const getFade = (phase: number, phaseTick: number, targetPhase: number): number => {
   if (phase < targetPhase) return 0;
@@ -15,8 +15,7 @@ export const drawScene = (
   phase: number,
   phaseTick: number,
   cw: number,
-  ch: number,
-  hoveredNode: StarNode | null
+  ch: number
 ) => {
   p.background(3, 4, 8);
 
@@ -90,9 +89,10 @@ export const drawScene = (
   if (fade3 > 0) {
     sceneConfig.stars.forEach((star) => {
       p.noStroke();
-      for (let i = 0; i < 4; i += 1) {
-        p.fill(star.planetColor[0], star.planetColor[1], star.planetColor[2], 12 * (4 - i) * 0.25 * fade3);
-        const glowSize = star.glow * (1 + i * 0.45);
+      for (let i = 0; i < 5; i += 1) {
+        const alphaBase = star.isBestLikes || star.isBestComments ? 18 : 12;
+        p.fill(star.planetColor[0], star.planetColor[1], star.planetColor[2], alphaBase * (5 - i) * 0.24 * fade3);
+        const glowSize = star.glow * (1.05 + i * 0.52);
         p.ellipse(star.x, star.y, glowSize, glowSize);
       }
 
@@ -105,6 +105,36 @@ export const drawScene = (
           p.ellipse(star.x, star.y, rSize, rSize);
         }
       }
+
+      // ORBITAL LIKES GAUGE (Draws likes count sweeping along a dedicated orbit ring)
+      p.noFill();
+      p.stroke(star.planetColor[0], star.planetColor[1], star.planetColor[2], 40 * fade3);
+      p.strokeWeight(0.4);
+      const likeOrbitSize = star.radius * 2 + 14;
+      p.ellipse(star.x, star.y, likeOrbitSize, likeOrbitSize);
+      
+      p.noStroke();
+      p.textFont("Courier New");
+      p.textSize(6.5);
+      p.textAlign(p.CENTER, p.CENTER);
+      
+      // Calculate a deterministic angle offset based on likes count
+      const textAngle = -p.HALF_PI + (star.likes % 10) * 0.12;
+      const tx = star.x + Math.cos(textAngle) * (likeOrbitSize * 0.5);
+      const ty = star.y + Math.sin(textAngle) * (likeOrbitSize * 0.5);
+      
+      // Format likes (e.g., 1.4k if above 1000)
+      const formattedLikes = star.likes >= 1000 
+        ? `${(star.likes / 1000).toFixed(1)}k` 
+        : `${star.likes}`;
+      
+      // Draw backdrop to cleanly slice the orbit line where the text resides
+      p.fill(3, 4, 8);
+      p.rectMode(p.CENTER);
+      p.rect(tx, ty, p.textWidth(formattedLikes) + 2, 7);
+      
+      p.fill(245, 235, 215, 180 * fade3);
+      p.text(formattedLikes, tx, ty);
 
       p.push();
       p.noStroke();
@@ -138,24 +168,41 @@ export const drawScene = (
           p.circle(star.x + star.radius * 0.45, star.y - star.radius * 0.35, star.radius * 0.18);
           break;
         default:
-          p.fill(255, 255, 255, 240 * fade3);
+          p.fill(star.planetColor[0], star.planetColor[1], star.planetColor[2], 235 * fade3);
           p.circle(star.x, star.y, star.radius * 2);
-          p.fill(star.planetColor[0], star.planetColor[1], star.planetColor[2], 180 * fade3);
-          p.circle(star.x, star.y, star.radius * 1.5);
+          p.fill(0, 0, 0, 48 * fade3);
+          p.circle(star.x - star.radius * 0.35, star.y - star.radius * 0.25, star.radius * 0.38);
+          p.circle(star.x + star.radius * 0.25, star.y + star.radius * 0.45, star.radius * 0.26);
+          p.circle(star.x + star.radius * 0.45, star.y - star.radius * 0.35, star.radius * 0.18);
       }
       p.noStroke();
       p.fill(255, 255, 255, 235 * fade3);
       p.circle(star.x - star.radius * 0.35, star.y - star.radius * 0.35, star.radius * 0.38);
+
+      // Orbital dots based on likes magnitude
+      const dotCount = Math.max(3, Math.min(24, Math.round(Math.log10(Math.max(star.likes, 1) + 1) * 6)));
+      const orbitRadius = star.radius + 10 + Math.min(28, Math.log10(Math.max(star.likes, 1) + 1) * 4.2);
+      p.noFill();
+      p.stroke(255, 255, 255, 26 * fade3);
+      p.strokeWeight(0.6);
+      p.circle(star.x, star.y, orbitRadius * 2);
+
+      p.noStroke();
+      for (let d = 0; d < dotCount; d += 1) {
+        const phase = ((d / dotCount) * p.TWO_PI) + (star.id.length * 0.17);
+        const ox = star.x + Math.cos(phase) * orbitRadius;
+        const oy = star.y + Math.sin(phase) * orbitRadius;
+        p.fill(star.planetColor[0], star.planetColor[1], star.planetColor[2], 150 * fade3);
+        p.circle(ox, oy, 1.2 + (d % 3) * 0.35);
+      }
       p.pop();
 
       if (star.isBestLikes) {
-        p.stroke(star.planetColor[0], star.planetColor[1], star.planetColor[2], 150 * fade3);
-        p.strokeWeight(0.8);
-        p.line(star.x, star.y - star.radius * 7, star.x, star.y + star.radius * 7);
-        p.line(star.x - star.radius * 7, star.y, star.x + star.radius * 7, star.y);
-        p.stroke(255, 250, 240, 70 * fade3);
-        p.line(star.x - star.radius * 3.8, star.y - star.radius * 3.8, star.x + star.radius * 3.8, star.y + star.radius * 3.8);
-        p.line(star.x - star.radius * 3.8, star.y + star.radius * 3.8, star.x + star.radius * 3.8, star.y - star.radius * 3.8);
+        // Keep emphasis for top-liked post without aggressive asterisk rays
+        p.noFill();
+        p.stroke(star.planetColor[0], star.planetColor[1], star.planetColor[2], 75 * fade3);
+        p.strokeWeight(0.9);
+        p.circle(star.x, star.y, star.radius * 3.4);
       }
 
       if (star.isBestComments) {
@@ -210,78 +257,40 @@ export const drawScene = (
     p.textFont("Courier New");
     p.textAlign(p.LEFT, p.TOP);
     p.fill(245, 235, 215, 150 * fade5);
-    p.textSize(8);
+    p.textSize(16);
     p.text("DIGITAL EXHIBITION SYSTEM // SPEC: IG-ANALYSIS", 45, 45);
-    p.textSize(12);
+    p.textSize(24);
     p.fill(245, 235, 215, 220 * fade5);
     p.text("ACUARELA DE CONSTELACION DIGITAL", 45, 58);
 
     p.textAlign(p.LEFT, p.BOTTOM);
     p.fill(245, 235, 215, 180 * fade5);
-    p.textSize(10);
+    p.textSize(18);
     p.text(`ARTIST CODE: @${payload.username || "unknown"}`, 45, ch - 62);
     p.fill(225, 210, 185, 130 * fade5);
-    p.textSize(8);
+    p.textSize(14);
     const generatedAtStr = payload.generated_at ? new Date(payload.generated_at).toLocaleString() : new Date().toLocaleString();
     p.text(`GEN TIME: ${generatedAtStr}`, 45, ch - 48);
     p.text(`SEED SYSTEM: DETERMINISTIC LAYER [${payload.render_hints?.seed || "EXHIBIT"}]`, 45, ch - 34);
 
     p.textAlign(p.RIGHT, p.TOP);
     p.fill(242, 180, 92, 180 * fade5);
-    p.textSize(8);
+    p.textSize(14);
     const topTags = (payload.analysis?.top_hashtags || []).slice(0, 4);
     topTags.forEach((tag, idx) => p.text(`#${tag.value || tag.hashtag || ""}`, cw - 45, 45 + idx * 14));
 
     p.textAlign(p.RIGHT, p.BOTTOM);
     p.fill(245, 235, 215, 160 * fade5);
-    p.textSize(9);
+    p.textSize(16);
     p.text(`CATALOGUE NO: ${sceneConfig.catalogNumber}`, cw - 45, ch - 62);
     p.fill(225, 210, 185, 110 * fade5);
-    p.textSize(7.5);
-    p.text("MAP KEY:\n• STAR TYPE   = PLANETARY BODY\n• STAR RADIUS = LIKES INFLUENCE\n• SATELLITES  = INDIVIDUAL MENTIONS", cw - 45, ch - 34);
+    p.textSize(13.5);
+    p.text(
+      "SISTEMA DE EQUIVALENCIAS Y CARTOGRAFIA CELESTE:\n• TIPO PLANETA = ESTILO VISUAL\n• RADIO PLANETA = LIKES\n• AURA/ANILLOS = COMMENTS\n• ORBITA DE PUNTOS = MAGNITUD DE LIKES\n• SATELITES = MENTIONS",
+      cw - 45,
+      ch - 34
+    );
   }
 
-  if (phase >= 5 && hoveredNode) {
-    const star = hoveredNode;
-    const post = star.post;
-    p.stroke(255, 255, 255, 165);
-    p.strokeWeight(0.6);
-    const isRight = star.x > cw / 2;
-    const isBottom = star.y > ch / 2;
-    const px = star.x + (isRight ? -45 : 45);
-    const py = star.y + (isBottom ? -45 : 45);
-    p.line(star.x, star.y, px, py);
-    p.line(px, py, px + (isRight ? -130 : 130), py);
-
-    const cardX = px + (isRight ? -135 : 5);
-    const cardY = py - 35;
-    const cardW = 130;
-    const cardH = 75;
-    p.noStroke();
-    p.fill(5, 7, 18, 225);
-    p.rect(cardX, cardY, cardW, cardH, 4);
-    p.stroke(255, 255, 255, 40);
-    p.strokeWeight(0.8);
-    p.noFill();
-    p.rect(cardX, cardY, cardW, cardH, 4);
-    p.stroke(star.planetColor[0], star.planetColor[1], star.planetColor[2], 220);
-    p.strokeWeight(1.8);
-    p.line(cardX, cardY, cardX, cardY + 8);
-    p.line(cardX, cardY, cardX + 8, cardY);
-    p.noStroke();
-    p.textFont("Courier New");
-    p.textSize(8);
-    p.textAlign(p.LEFT, p.TOP);
-    p.fill(170, 190, 220);
-    const postDate = post.timestamp ? post.timestamp.split("T")[0] : "N/A";
-    p.text(`PLANET:  ${star.planetType.toUpperCase()}`, cardX + 6, cardY + 8);
-    p.text(`DATE:    ${postDate}`, cardX + 6, cardY + 20);
-    p.fill(255, 255, 255);
-    p.text(`LIKES:   ${star.likes}`, cardX + 6, cardY + 34);
-    p.text(`COMMENTS:${star.comments}`, cardX + 6, cardY + 46);
-    p.fill(star.planetColor[0], star.planetColor[1], star.planetColor[2]);
-    const hTags = (post.hashtags || []).slice(0, 1).map((h) => `#${h}`).join("");
-    const mMents = (post.mentions || []).slice(0, 1).map((m) => `@${m}`).join("");
-    p.text(`${hTags} ${mMents}`.substring(0, 24), cardX + 6, cardY + 58);
-  }
+  // Hover card removed — rendered by React <HoverInfoPanel> outside canvas
 };

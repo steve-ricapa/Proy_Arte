@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import p5 from "p5";
 import { ReactP5Wrapper, Sketch } from "@p5-wrapper/react";
 
@@ -6,6 +6,7 @@ import { useArtworkExport } from "./hooks/useArtworkExport";
 import { buildSceneConfig } from "./scene/buildSceneConfig";
 import { drawScene } from "./render/drawScene";
 import { InstagramAnalysisPayload, SceneConfig, StarNode } from "./types/artwork.types";
+import HoverInfoPanel from "./HoverInfoPanel";
 
 type DigitalExposureArtworkProps = {
   data: InstagramAnalysisPayload;
@@ -13,10 +14,18 @@ type DigitalExposureArtworkProps = {
   height?: number;
 };
 
+type SketchProps = {
+  payload: InstagramAnalysisPayload;
+  width: number;
+  height: number;
+  onHover: (node: StarNode | null) => void;
+};
+
 const FALLBACK_WIDTH = 900;
 const FALLBACK_HEIGHT = 900;
 
-const sketch: Sketch<{ payload: InstagramAnalysisPayload; width: number; height: number }> = (p: p5) => {
+const sketch: Sketch<SketchProps> = (p: p5) => {
+  let onHover: ((node: StarNode | null) => void) | null = null;
   let payload: InstagramAnalysisPayload | null = null;
   let cw = FALLBACK_WIDTH;
   let ch = FALLBACK_HEIGHT;
@@ -29,9 +38,19 @@ const sketch: Sketch<{ payload: InstagramAnalysisPayload; width: number; height:
   p.setup = () => {
     p.createCanvas(cw, ch);
     p.frameRate(30);
+    if (p.canvas) {
+      p.canvas.addEventListener("mouseleave", () => {
+        if (hoveredNode !== null) {
+          hoveredNode = null;
+          if (onHover) onHover(null);
+          p.loop();
+        }
+      });
+    }
   };
 
   p.updateWithProps = (props) => {
+    onHover = props.onHover || null;
     payload = props.payload;
     cw = props.width || FALLBACK_WIDTH;
     ch = props.height || FALLBACK_HEIGHT;
@@ -42,13 +61,14 @@ const sketch: Sketch<{ payload: InstagramAnalysisPayload; width: number; height:
       phase = 1;
       phaseTick = 0;
       hoveredNode = null;
+      if (onHover) onHover(null);
       p.loop();
     }
   };
 
   p.draw = () => {
     if (!payload || !sceneConfig) return;
-    drawScene(p, payload, sceneConfig, phase, phaseTick, cw, ch, hoveredNode);
+    drawScene(p, payload, sceneConfig, phase, phaseTick, cw, ch);
 
     phaseTick += 1;
     if (phaseTick > 24 && phase < 5) {
@@ -74,6 +94,7 @@ const sketch: Sketch<{ payload: InstagramAnalysisPayload; width: number; height:
 
     if (found !== hoveredNode) {
       hoveredNode = found;
+      if (onHover) onHover(hoveredNode);
       p.loop();
     }
   };
@@ -83,6 +104,11 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
   const containerRef = useRef<HTMLDivElement>(null);
   const payload = useMemo(() => data, [data]);
   const handleExport = useArtworkExport(containerRef, data.username || "profile");
+  const [hoveredStar, setHoveredStar] = useState<StarNode | null>(null);
+
+  const handleHover = useCallback((node: StarNode | null) => {
+    setHoveredStar(node);
+  }, []);
 
   return (
     <section className="glass-panel p-4 md:p-6 transition-all duration-300 shadow-2xl border border-white/10 hover:border-white/15 bg-slate-950/40">
@@ -107,8 +133,11 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
         </button>
       </div>
 
-      <div ref={containerRef} className="overflow-hidden rounded-xl border border-white/10 bg-[#030408] flex items-center justify-center shadow-inner">
-        <ReactP5Wrapper sketch={sketch} payload={payload} width={width} height={height} />
+      <div className="flex gap-4 items-start">
+        <div ref={containerRef} className="overflow-hidden rounded-xl border border-white/10 bg-[#030408] flex-shrink-0 shadow-inner">
+          <ReactP5Wrapper sketch={sketch} payload={payload} width={width} height={height} onHover={handleHover} />
+        </div>
+        <HoverInfoPanel star={hoveredStar} />
       </div>
 
       {/* Panel de Equivalencias Estelares */}
@@ -216,8 +245,8 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
               <div className="flex items-start gap-2">
                 <span className="text-[12px] mt-0.5">🪐</span>
                 <div>
-                  <strong className="text-white block font-medium">Masa Planetaria (Likes)</strong>
-                  <span className="text-slate-400 text-[10px]">El tamaño físico del planeta representa la fuerza gravitacional del post (su total de Likes).</span>
+                  <strong className="text-white block font-medium">Masa Planetaria y Órbita (Likes)</strong>
+                  <span className="text-slate-400 text-[10px]">El tamaño del planeta representa la fuerza gravitacional del post (su total de Likes). Además, la cantidad exacta se inscribe directamente barriendo una órbita circular concéntrica al cuerpo (como un cuadrante astronómico).</span>
                 </div>
               </div>
               <div className="flex items-start gap-2">

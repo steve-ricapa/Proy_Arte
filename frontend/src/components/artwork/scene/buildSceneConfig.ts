@@ -105,7 +105,7 @@ export const buildSceneConfig = (
       size: prng.range(2.5, 5),
     }));
 
-    const types: PlanetType[] = ["glow_star", "gas_giant", "ringed", "rocky"];
+    const types: PlanetType[] = ["gas_giant", "ringed", "rocky"];
 
     return {
       id: post.id || `node-${idx}`,

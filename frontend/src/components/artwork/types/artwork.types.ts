@@ -43,7 +43,7 @@ export type InstagramAnalysisPayload = {
   };
 };
 
-export type PlanetType = "gas_giant" | "ringed" | "rocky" | "glow_star";
+export type PlanetType = "gas_giant" | "ringed" | "rocky";
 
 export type BgStar = { x: number; y: number; r: number; a: number };
 export type CloudBlob = {
