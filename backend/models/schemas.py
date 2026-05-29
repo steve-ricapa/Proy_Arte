@@ -6,12 +6,25 @@ from pydantic import BaseModel, Field
 
 
 class AnalyzeProfileRequest(BaseModel):
-    username: str = Field(..., min_length=1, max_length=30)
-    posts_limit: int = Field(default=12, ge=3, le=30)
+    username: str = Field(..., min_length=1, max_length=120)
+    limit: int = Field(default=12, ge=1, le=50)
+
+    @property
+    def posts_limit(self) -> int:
+        return self.limit
 
 
 class AnalyzeProfileResponse(BaseModel):
-    process_id: str
+    source: str
+    status: str
+    username: str
+    generated_at: str
+    profile: dict[str, Any]
+    metadata: dict[str, Any]
+    metrics: dict[str, Any]
+    analysis: dict[str, Any]
+    posts: list[dict[str, Any]]
+    render_hints: dict[str, Any]
 
 
 class PipelineEvent(BaseModel):

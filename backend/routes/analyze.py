@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from models.schemas import AnalyzeProfileRequest, AnalyzeProfileResponse
+from services.apify_instagram_service import ApifyServiceError, clean_instagram_username
 from services.pipeline_service import PipelineService
 
 
@@ -11,10 +12,34 @@ def get_analyze_router(pipeline_service: PipelineService) -> APIRouter:
 
     @router.post("/analyze-profile", response_model=AnalyzeProfileResponse)
     async def analyze_profile(payload: AnalyzeProfileRequest) -> AnalyzeProfileResponse:
-        process_id = pipeline_service.start_profile_analysis(
-            username=payload.username.strip(),
-            posts_limit=payload.posts_limit,
-        )
-        return AnalyzeProfileResponse(process_id=process_id)
+        try:
+            username = clean_instagram_username(payload.username)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        auth = pipeline_service.get_auth_status()
+        if auth.get("status") == "failed" and "APIFY_TOKEN" in auth.get("note", ""):
+            raise HTTPException(status_code=500, detail="APIFY_TOKEN no esta configurado en el backend.")
+
+        try:
+            result = await pipeline_service.analyze_profile(username=username, posts_limit=payload.posts_limit)
+            return AnalyzeProfileResponse(**result)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ApifyServiceError as exc:
+            if exc.error_type == "missing_token":
+                raise HTTPException(status_code=500, detail="APIFY_TOKEN no esta configurado en el backend.") from exc
+            if exc.error_type == "auth":
+                raise HTTPException(status_code=502, detail="Apify token invalido o sin permisos.") from exc
+            if exc.error_type == "timeout":
+                raise HTTPException(status_code=504, detail="La extraccion tardo demasiado. Intenta con menos posts.") from exc
+            raise HTTPException(status_code=502, detail="Error consultando Apify.") from exc
+        except RuntimeError as exc:
+            detail = str(exc)
+            if "token" in detail.lower():
+                raise HTTPException(status_code=502, detail="Apify token invalido o sin permisos.") from exc
+            if "timeout" in detail.lower() or "tardo demasiado" in detail.lower():
+                raise HTTPException(status_code=504, detail="La extraccion tardo demasiado. Intenta con menos posts.") from exc
+            raise HTTPException(status_code=502, detail="Error consultando Apify.") from exc
 
     return router

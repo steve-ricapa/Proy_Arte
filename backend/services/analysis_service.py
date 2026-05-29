@@ -34,6 +34,8 @@ class AnalysisService:
         for post in posts:
             caption = post.get("caption", "")
             tags = [t.lower() for t in HASHTAG_PATTERN.findall(caption)]
+            raw_tags = post.get("hashtags", []) or []
+            tags.extend([str(tag).lstrip("#").lower() for tag in raw_tags if tag])
             counter.update(tags)
 
         return [
@@ -45,9 +47,8 @@ class AnalysisService:
         if len(posts) < 2:
             return float(len(posts))
 
-        dates = sorted(
-            [datetime.fromisoformat(post["timestamp"]) for post in posts if post.get("timestamp")]
-        )
+        dates = sorted([self._parse_timestamp(post.get("timestamp")) for post in posts if post.get("timestamp")])
+        dates = [d for d in dates if d is not None]
         if len(dates) < 2:
             return float(len(posts))
 
@@ -65,3 +66,16 @@ class AnalysisService:
         if followers <= 0:
             return round(avg_interactions, 2)
         return round((avg_interactions / followers) * 100, 2)
+
+    def _parse_timestamp(self, value: Any) -> datetime | None:
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        raw = str(value).strip()
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        try:
+            return datetime.fromisoformat(raw)
+        except ValueError:
+            return None

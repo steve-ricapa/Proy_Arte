@@ -1,0 +1,56 @@
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Sora", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "Consolas", monospace;
+}
+
+@layer base {
+  body {
+    @apply min-h-screen bg-slate-950 text-slate-100 antialiased;
+    background-image:
+      radial-gradient(circle at 12% 12%, rgba(56, 189, 248, 0.2), transparent 38%),
+      radial-gradient(circle at 85% 6%, rgba(251, 191, 36, 0.18), transparent 36%),
+      linear-gradient(140deg, #030712 0%, #0b1324 45%, #030712 100%);
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-2xl border border-white/10 bg-slate-900/65 shadow-2xl shadow-slate-950/40 backdrop-blur;
+  }
+
+  .panel-title {
+    @apply text-sm font-semibold uppercase tracking-[0.14em] text-sky-300;
+  }
+
+  .metric-card {
+    @apply rounded-xl border border-white/8 bg-slate-900/70 p-3;
+  }
+}
+
+@keyframes pulse-soft {
+  0% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.65;
+  }
+}
+
+.pulse-soft {
+  animation: pulse-soft 1.6s ease-in-out infinite;
+}
+
+canvas {
+  max-width: 100% !important;
+  height: auto !important;
+}

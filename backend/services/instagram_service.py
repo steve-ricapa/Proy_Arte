@@ -1,68 +1,107 @@
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime
 from typing import Any
 
-import instaloader
-from instaloader.exceptions import InstaloaderException
+from core import config
+from services.apify_instagram_service import (
+    ApifyServiceError,
+    analyze_instagram_posts,
+    clean_instagram_username,
+    fetch_instagram_posts,
+)
 
 
 class InstagramService:
     def __init__(self) -> None:
-        self.loader = instaloader.Instaloader(
-            download_pictures=False,
-            download_video_thumbnails=False,
-            download_videos=False,
-            save_metadata=False,
-            compress_json=False,
-            quiet=True,
-        )
+        token = (config.APIFY_TOKEN or "").strip()
+        if token:
+            self.auth_status = "configured"
+            self.auth_note = "Extractor Apify habilitado."
+        else:
+            self.auth_status = "failed"
+            self.auth_note = "APIFY_TOKEN no esta configurado en el backend."
 
-    async def get_profile_metadata(self, username: str) -> dict[str, Any]:
-        return await asyncio.to_thread(self._get_profile_metadata_sync, username)
-
-    def _get_profile_metadata_sync(self, username: str) -> dict[str, Any]:
-        try:
-            profile = instaloader.Profile.from_username(self.loader.context, username)
-        except InstaloaderException as exc:
-            raise ValueError(f"No se pudo obtener el perfil '{username}': {exc}") from exc
-
+    def get_auth_status(self) -> dict[str, str]:
         return {
-            "username": profile.username,
-            "full_name": profile.full_name,
-            "biography": profile.biography,
-            "followers": profile.followers,
-            "followees": profile.followees,
-            "posts_count": profile.mediacount,
-            "is_verified": profile.is_verified,
+            "status": self.auth_status,
+            "note": self.auth_note,
+        }
+
+    def classify_error(self, exc: Exception) -> str:
+        if isinstance(exc, ApifyServiceError):
+            mapping = {
+                "missing_token": "missing_token",
+                "auth": "apify_auth",
+                "timeout": "timeout",
+                "upstream": "upstream",
+                "network": "network",
+                "invalid_output": "invalid_output",
+            }
+            return mapping.get(exc.error_type, "apify_error")
+
+        msg = str(exc).lower()
+        if "invalid instagram username" in msg or "username is required" in msg:
+            return "invalid_username"
+        if "no se encontraron posts" in msg:
+            return "not_found"
+        return "unknown"
+
+    async def get_profile_metadata(self, username: str, posts_limit: int = 12) -> dict[str, Any]:
+        safe_username = clean_instagram_username(username)
+        posts = await fetch_instagram_posts(safe_username, limit=posts_limit)
+        if not posts:
+            raise ValueError("No se encontraron posts publicos para este perfil.")
+
+        first = posts[0]
+        return {
+            "username": first.get("ownerUsername") or safe_username,
+            "full_name": first.get("ownerFullName") or "",
+            "biography": "",
+            "followers": 0,
+            "followees": 0,
+            "posts_count": len(posts),
+            "is_verified": False,
+            "source": "apify",
         }
 
     async def get_recent_posts(self, username: str, limit: int = 12) -> list[dict[str, Any]]:
-        return await asyncio.to_thread(self._get_recent_posts_sync, username, limit)
+        safe_username = clean_instagram_username(username)
+        posts = await fetch_instagram_posts(safe_username, limit=limit)
+        if not posts:
+            return []
 
-    def _get_recent_posts_sync(self, username: str, limit: int) -> list[dict[str, Any]]:
-        try:
-            profile = instaloader.Profile.from_username(self.loader.context, username)
-            posts: list[dict[str, Any]] = []
-            for idx, post in enumerate(profile.get_posts()):
-                if idx >= limit:
-                    break
-                posts.append(
-                    {
-                        "id": post.mediaid,
-                        "shortcode": post.shortcode,
-                        "caption": post.caption or "",
-                        "likes": post.likes,
-                        "comments": post.comments,
-                        "timestamp": self._iso(post.date_utc),
-                    }
-                )
-        except InstaloaderException as exc:
-            raise ValueError(f"Error al descargar publicaciones: {exc}") from exc
+        normalized: list[dict[str, Any]] = []
+        for post in posts:
+            normalized.append(
+                {
+                    "id": post.get("id"),
+                    "caption": post.get("caption") or "",
+                    "likes": int(post.get("likesCount") or 0),
+                    "comments": int(post.get("commentsCount") or 0),
+                    "timestamp": post.get("timestamp"),
+                    "hashtags": post.get("hashtags") or [],
+                    "mentions": post.get("mentions") or [],
+                    "owner_username": post.get("ownerUsername"),
+                    "owner_full_name": post.get("ownerFullName"),
+                    "url": post.get("url") or post.get("inputUrl"),
+                }
+            )
+        return normalized
 
-        return posts
-
-    @staticmethod
-    def _iso(value: datetime) -> str:
-        return value.isoformat()
+    async def analyze_posts(self, posts: list[dict[str, Any]], followers_count: int | None = None) -> dict[str, Any]:
+        payload = [
+            {
+                "id": post.get("id"),
+                "caption": post.get("caption"),
+                "likesCount": post.get("likes", 0),
+                "commentsCount": post.get("comments", 0),
+                "hashtags": post.get("hashtags", []),
+                "mentions": post.get("mentions", []),
+                "timestamp": post.get("timestamp"),
+                "ownerUsername": post.get("owner_username"),
+                "ownerFullName": post.get("owner_full_name"),
+                "url": post.get("url"),
+            }
+            for post in posts
+        ]
+        return analyze_instagram_posts(payload, followers_count=followers_count)

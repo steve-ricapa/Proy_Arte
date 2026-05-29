@@ -1,147 +1,82 @@
-import { useEffect, useRef, useState } from "react";
-import InputForm from "./components/InputForm";
-import ProgressViewer from "./components/ProgressViewer";
-import ImageCanvas from "./components/ImageCanvas";
+import { useEffect, useState } from "react";
+import axios from "axios";
+import InputForm from "./components/forms/InputForm";
+import DigitalExposureArtwork from "./components/artwork/DigitalExposureArtwork";
+import samplePayload from "./samplePayload";
 
-const API_BASE = "http://localhost:8000";
-const WS_BASE = "ws://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 function App() {
-  const [status, setStatus] = useState("cargando");
-  const [processId, setProcessId] = useState("");
-  const [step, setStep] = useState("");
-  const [message, setMessage] = useState("Inicializando interfaz...");
-  const [progress, setProgress] = useState(0);
-  const [imageBase64, setImageBase64] = useState("");
+  const [status, setStatus] = useState("listo");
+  const [message, setMessage] = useState("Ingresa un username para crear una obra generativa.");
+  const [payload, setPayload] = useState(null);
+  const [extractorStatus, setExtractorStatus] = useState(null);
 
-  const wsRef = useRef(null);
-  const reconnectTimerRef = useRef(null);
-  const reconnectAttemptsRef = useRef(0);
-  const terminalStatusRef = useRef(false);
+  const refreshExtractorStatus = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/extractor-status`);
+      setExtractorStatus(response.data);
+    } catch {
+      setExtractorStatus(null);
+    }
+  };
 
   useEffect(() => {
-    setStatus("listo");
-    setMessage("Ingresa un username para comenzar.");
-    return () => {
-      if (reconnectTimerRef.current) {
-        window.clearTimeout(reconnectTimerRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
+    refreshExtractorStatus();
   }, []);
 
-  const connectWebSocket = (id) => {
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
-    const socket = new WebSocket(`${WS_BASE}/ws/${id}`);
-    wsRef.current = socket;
-
-    socket.onopen = () => {
-      reconnectAttemptsRef.current = 0;
-      setMessage("Conectado. Esperando eventos del pipeline...");
-    };
-
-    socket.onmessage = (event) => {
-      const payload = JSON.parse(event.data);
-      setStep(payload.step || "");
-      setProgress(payload.progress || 0);
-      setMessage(payload.message || "Procesando...");
-
-      if (payload.image) {
-        setImageBase64(payload.image);
-      }
-
-      if (payload.step === "completed") {
-        terminalStatusRef.current = true;
-        setStatus("terminado");
-      } else if (payload.step === "error") {
-        terminalStatusRef.current = true;
-        setStatus("error");
-      } else {
-        setStatus("procesando");
-      }
-    };
-
-    socket.onclose = () => {
-      if (terminalStatusRef.current) {
-        return;
-      }
-      if (reconnectAttemptsRef.current >= 5) {
-        setStatus("error");
-        setMessage("No se pudo reconectar el WebSocket.");
-        return;
-      }
-
-      reconnectAttemptsRef.current += 1;
-      const attempt = reconnectAttemptsRef.current;
-      const waitMs = Math.min(1000 * attempt, 5000);
-      setMessage(`Reconectando WebSocket (intento ${attempt})...`);
-
-      reconnectTimerRef.current = window.setTimeout(() => {
-        connectWebSocket(id);
-      }, waitMs);
-    };
-
-    socket.onerror = () => {
-      socket.close();
-    };
-  };
-
   const handleAnalyze = async (username) => {
-    terminalStatusRef.current = false;
-    reconnectAttemptsRef.current = 0;
     setStatus("cargando");
-    setStep("starting");
-    setProgress(0);
-    setImageBase64("");
-    setMessage("Solicitando análisis al backend...");
+    setMessage("Recolectando huellas digitales del perfil...");
+    setPayload(null);
 
     try {
-      const response = await fetch(`${API_BASE}/analyze-profile`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username }),
-      });
-
-      if (!response.ok) {
-        throw new Error("No se pudo iniciar el análisis.");
-      }
-
-      const data = await response.json();
-      setProcessId(data.process_id);
-      setStatus("procesando");
-      connectWebSocket(data.process_id);
+      const response = await axios.post(`${API_BASE}/analyze-profile`, { username, limit: 50 });
+      setPayload(response.data);
+      setStatus("terminado");
+      setMessage("Payload completo recibido. La constelacion ya puede dibujarse.");
     } catch (error) {
       setStatus("error");
-      setMessage(error.message || "Error al iniciar el análisis.");
+      setMessage(error?.response?.data?.detail || error?.message || "No se pudo analizar el perfil.");
+      await refreshExtractorStatus();
     }
   };
 
+  const extractorAuth = extractorStatus?.auth || null;
+  const extractorReady = extractorAuth?.status === "configured";
+  const helperMessage = extractorReady
+    ? "Ingresa solo el username de Instagram (ejemplo: natgeo)."
+    : "Extractor no configurado. Revisa APIFY_TOKEN en backend/.env.";
+
   return (
-    <main className="app-shell">
-      <header>
-        <p className="eyebrow">Realtime Identity Rendering</p>
-        <h1>Instagram Generative Analyzer</h1>
-        <p>
-          Convierte metadata, hashtags y engagement en una pieza visual que se va construyendo
-          en vivo por batches.
-        </p>
+    <main className="mx-auto w-[min(1180px,94vw)] py-8 md:py-10">
+      <header className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70 px-5 py-7 shadow-2xl shadow-slate-950/40 backdrop-blur md:px-8">
+        <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-sky-300/15 blur-2xl" />
+        <div className="absolute -bottom-14 left-1/3 h-36 w-36 rounded-full bg-amber-300/15 blur-2xl" />
+        <p className="text-xs uppercase tracking-[0.22em] text-sky-300">Arte generativo Instagram</p>
+        <h1 className="mt-2 text-3xl font-extrabold leading-tight text-slate-50 md:text-5xl">
+          Acuarela de constelacion digital
+        </h1>
+        <p className="mt-3 max-w-3xl text-sm text-slate-300 md:text-base">{message}</p>
       </header>
 
-      <InputForm onSubmit={handleAnalyze} disabled={status === "cargando" || status === "procesando"} />
+      <InputForm onSubmit={handleAnalyze} disabled={status === "cargando" || !extractorReady} helperMessage={helperMessage} />
 
-      <div className="dashboard-grid">
-        <ProgressViewer step={step} message={message} progress={progress} status={status} />
-        <ImageCanvas imageBase64={imageBase64} />
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() => {
+            setPayload(samplePayload);
+            setStatus("terminado");
+            setMessage("Payload de prueba cargado localmente.");
+          }}
+          className="rounded-lg border border-sky-300/35 bg-sky-300/10 px-3 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-300/20"
+        >
+          Cargar sample payload
+        </button>
       </div>
 
-      <footer>
-        <span>process_id: {processId || "-"}</span>
-      </footer>
+      {payload ? <DigitalExposureArtwork data={payload} width={1080} height={1080} /> : null}
     </main>
   );
 }

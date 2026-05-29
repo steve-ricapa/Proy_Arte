@@ -10,6 +10,8 @@ env/
 # Local environment files
 .env
 .env.*
+!.env.example
+*.session
 
 # Tooling/cache
 .pytest_cache/

@@ -2,7 +2,7 @@
 
 Monolito con dos aplicaciones en el mismo repo:
 
-- `backend/` -> FastAPI + WebSockets + Instaloader + Pillow
+- `backend/` -> FastAPI + Apify + Pillow
 - `frontend/` -> React + Vite
 
 ## Estructura
@@ -34,6 +34,8 @@ python -m venv .venv
 # Windows PowerShell
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+# Configurar variables de entorno
+copy .env.example .env
 uvicorn main:app --reload
 ```
 
@@ -47,7 +49,8 @@ Request:
 
 ```json
 {
-  "username": "usuario"
+  "username": "humansofny",
+  "limit": 12
 }
 ```
 
@@ -55,13 +58,22 @@ Response:
 
 ```json
 {
-  "process_id": "uuid"
+  "source": "apify",
+  "status": "success",
+  "username": "humansofny",
+  "generated_at": "2026-05-28T10:25:30.100000+00:00",
+  "profile": {},
+  "metadata": {},
+  "metrics": {},
+  "analysis": {},
+  "posts": [],
+  "render_hints": {}
 }
 ```
 
 ### WebSocket
 
-- `ws://localhost:8000/ws/{process_id}`
+- El frontend ya no usa WebSocket. El flujo es one-shot por `POST /analyze-profile`.
 
 Eventos ejemplo:
 
@@ -73,6 +85,11 @@ Eventos ejemplo:
   "image": "base64_string"
 }
 ```
+
+### Estado extractor
+
+- `GET /auth-status`: estado de configuracion del extractor Apify.
+- `GET /extractor-status`: estado completo (auth + cooldown global/perfil).
 
 ## Frontend
 
@@ -86,8 +103,26 @@ Aplicación en `http://localhost:5173`.
 
 ## Flujo
 
-1. Ingresas username.
+1. Ingresas username (tambien acepta `@username` o URL de Instagram).
 2. Frontend llama `POST /analyze-profile`.
-3. Frontend abre `ws://localhost:8000/ws/{process_id}`.
-4. Backend ejecuta pipeline por etapas y envía progreso + imagen parcial en cada batch.
-5. Frontend actualiza barra, estado e imagen en tiempo real.
+3. Backend extrae posts con Apify y devuelve un payload completo (metadata, analisis y posts) en una sola respuesta.
+4. Frontend puede transformar ese payload en visualizaciones/arte con la libreria que prefieras.
+
+## Variables backend (.env)
+
+- Usa `backend/.env`:
+
+```bash
+APIFY_TOKEN=your_apify_token_here
+APIFY_ACTOR_ID=apify~instagram-scraper
+APIFY_POSTS_LIMIT=12
+APIFY_TIMEOUT_SECONDS=180
+```
+
+## Prueba rápida con curl
+
+```bash
+curl -X POST http://localhost:8000/analyze-profile \
+  -H "Content-Type: application/json" \
+  -d '{"username":"humansofny","limit":12}'
+```

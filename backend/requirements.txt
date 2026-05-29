@@ -1,7 +1,9 @@
 fastapi
-uvicorn
-instaloader
+uvicorn[standard]
 pillow
 numpy
 matplotlib
 python-multipart
+websockets
+python-dotenv
+httpx
