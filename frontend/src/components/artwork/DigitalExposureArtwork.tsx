@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import p5 from "p5";
-import { ReactP5Wrapper, Sketch } from "@p5-wrapper/react";
+import { ReactP5Wrapper, Sketch, P5CanvasInstance } from "@p5-wrapper/react";
 
 import { useArtworkExport } from "./hooks/useArtworkExport";
 import { buildSceneConfig } from "./scene/buildSceneConfig";
@@ -24,7 +23,7 @@ type SketchProps = {
 const FALLBACK_WIDTH = 900;
 const FALLBACK_HEIGHT = 900;
 
-const sketch: Sketch<SketchProps> = (p: p5) => {
+const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
   let onHover: ((node: StarNode | null) => void) | null = null;
   let payload: InstagramAnalysisPayload | null = null;
   let cw = FALLBACK_WIDTH;
@@ -49,7 +48,7 @@ const sketch: Sketch<SketchProps> = (p: p5) => {
     }
   };
 
-  p.updateWithProps = (props) => {
+  p.updateWithProps = (props: SketchProps) => {
     onHover = props.onHover || null;
     payload = props.payload;
     cw = props.width || FALLBACK_WIDTH;
