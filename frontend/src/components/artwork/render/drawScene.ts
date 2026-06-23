@@ -1,6 +1,6 @@
 import p5 from "p5";
 
-import { getNodeTimelineState } from "../timeline/temporal";
+import { getNodeTimelineState, getStarPositionAtTime } from "../timeline/temporal";
 import { SceneConfig } from "../types/artwork.types";
 
 const getFade = (phase: number, phaseTick: number, targetPhase: number): number => {
@@ -17,47 +17,55 @@ export const drawScene = (
   phaseTick: number,
   cw: number,
   ch: number,
-  currentTimestamp: number
+  currentTimestamp: number,
+  view: { zoom: number; panX: number; panY: number }
 ) => {
-  p.background(3, 4, 8);
+  p.background(0, 0, 0);
+
+  const anyScene = sceneConfig as any;
+  if (!anyScene.explosions) {
+    anyScene.explosions = [];
+  }
+  if (!anyScene.explodedStarIds) {
+    anyScene.explodedStarIds = new Set<string>();
+  }
+  if (anyScene.lastTimestamp === undefined) {
+    anyScene.lastTimestamp = currentTimestamp;
+  }
+
+  // If time moves backwards (scrubbing), reset the explosions
+  if (currentTimestamp < anyScene.lastTimestamp) {
+    anyScene.explosions = [];
+    anyScene.explodedStarIds.clear();
+  }
+  anyScene.lastTimestamp = currentTimestamp;
 
   const maxR = Math.max(cw, ch);
   p.noStroke();
-  for (let r = maxR; r > 0; r -= 15) {
-    const alpha = p.map(r, maxR, 0, 185, 5);
-    p.fill(2, 3, 6, alpha);
-    p.ellipse(cw / 2, ch / 2, r * 1.35, r * 1.25);
+  for (let r = maxR; r > 0; r -= 18) {
+    const alpha = p.map(r, maxR, 0, 38, 0);
+    p.fill(4, 4, 8, alpha);
+    p.ellipse(cw / 2, ch / 2, r * 1.28, r * 1.18);
   }
 
   const fade1 = getFade(phase, phaseTick, 1);
   const fade2 = getFade(phase, phaseTick, 2);
   const fade3 = getFade(phase, phaseTick, 3);
 
+  p.push();
+  p.translate(view.panX, view.panY);
+  p.scale(view.zoom);
+
   if (fade1 > 0) {
-    p.stroke(245, 235, 215, 6 * fade1);
-    p.strokeWeight(0.5);
-    sceneConfig.technicalGrid.forEach((line) => p.line(line.x1, line.y1, line.x2, line.y2));
-
-    p.fill(245, 235, 215, 15 * fade1);
-    p.noStroke();
-    p.textFont("Courier New");
-    p.textSize(8);
-    for (let gx = 120; gx < cw; gx += 240) {
-      for (let gy = 120; gy < ch; gy += 240) p.text("+", gx - 3, gy + 3);
-    }
-
-    p.noFill();
-    p.stroke(245, 235, 215, 8 * fade1);
-    p.strokeWeight(0.5);
-    p.ellipse(cw / 2, ch / 2, 320, 320);
-
-    p.stroke(245, 235, 215, 12 * fade1);
-    sceneConfig.compassTicks.forEach((tick) => p.line(tick.x1, tick.y1, tick.x2, tick.y2));
-
     p.noStroke();
     sceneConfig.bgStars.forEach((star) => {
-      p.fill(235, 245, 255, star.a * fade1);
+      const shimmer = 0.72 + 0.28 * Math.sin((star.x + star.y) * 0.01 + currentTimestamp * 0.00008);
+      p.fill(235, 245, 255, star.a * fade1 * shimmer);
       p.circle(star.x, star.y, star.r);
+      if (star.r > 1.8) {
+        p.fill(255, 255, 255, star.a * 0.22 * fade1 * shimmer);
+        p.circle(star.x, star.y, star.r * 2.1);
+      }
     });
   }
 
@@ -72,6 +80,7 @@ export const drawScene = (
   }
 
   if (phase < 5) {
+    p.pop();
     return;
   }
 
@@ -81,6 +90,8 @@ export const drawScene = (
     const fromTimeline = getNodeTimelineState(from, sceneConfig, currentTimestamp);
     const toTimeline = getNodeTimelineState(to, sceneConfig, currentTimestamp);
     if (!fromTimeline.isVisible || !toTimeline.isVisible) return;
+    const fromPos = getStarPositionAtTime(from, sceneConfig, currentTimestamp);
+    const toPos = getStarPositionAtTime(to, sceneConfig, currentTimestamp);
 
     const lineAlpha = Math.min(fromTimeline.alphaMultiplier, toTimeline.alphaMultiplier);
     if (conn.type === "mention") {
@@ -90,12 +101,71 @@ export const drawScene = (
       p.stroke(242, 180, 92, 20 * lineAlpha);
       p.strokeWeight(0.5);
     }
-    p.line(from.x, from.y, to.x, to.y);
+    p.line(fromPos.x, fromPos.y, toPos.x, toPos.y);
   });
 
-  sceneConfig.stars.forEach((star) => {
-    const timeline = getNodeTimelineState(star, sceneConfig, currentTimestamp);
+  sceneConfig.stars.forEach((originalStar) => {
+    const timeline = getNodeTimelineState(originalStar, sceneConfig, currentTimestamp);
+    const starPosition = getStarPositionAtTime(originalStar, sceneConfig, currentTimestamp);
+
+    // Trigger explosion if dead and not yet exploded
+    if ((timeline as any).isDead && !anyScene.explodedStarIds.has(originalStar.id)) {
+      anyScene.explodedStarIds.add(originalStar.id);
+
+      // Spawn colored particles
+      const particleCount = Math.floor(p.random(35, 55));
+      for (let i = 0; i < particleCount; i++) {
+        const angle = p.random(p.TWO_PI);
+        const speed = p.random(1.2, 5.2);
+        anyScene.explosions.push({
+          x: starPosition.x,
+          y: starPosition.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: p.random(2, 6),
+          color: originalStar.planetColor,
+          alpha: p.random(180, 255),
+          decay: p.random(1.2, 3.2) // Slower decay for longer life (was 3 to 7)
+        });
+      }
+
+      // Spawn white flash particles
+      for (let i = 0; i < 10; i++) {
+        const angle = p.random(p.TWO_PI);
+        const speed = p.random(0.5, 2.5);
+        anyScene.explosions.push({
+          x: starPosition.x,
+          y: starPosition.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: p.random(3, 7),
+          color: [255, 255, 255],
+          alpha: 255,
+          decay: p.random(4, 8) // Slower flash decay (was 8 to 14)
+        });
+      }
+    }
+
     if (!timeline.isVisible) return;
+
+    // Shadow star with birthScale to animate planet creation size
+    const birthScale = Math.sin(timeline.appearance * Math.PI / 2);
+    const star = {
+      ...originalStar,
+      x: starPosition.x,
+      y: starPosition.y,
+      radius: originalStar.radius * birthScale,
+      glow: originalStar.glow * birthScale
+    };
+    
+    // Draw birth shockwave ripple
+    if (timeline.appearance > 0 && timeline.appearance < 1.0) {
+      p.noFill();
+      p.stroke(originalStar.planetColor[0], originalStar.planetColor[1], originalStar.planetColor[2], 180 * (1 - timeline.appearance));
+      p.strokeWeight(1.5);
+      const rippleSize = originalStar.radius * 2 * (0.2 + timeline.appearance * 3.8);
+      p.circle(star.x, star.y, rippleSize);
+    }
 
     const alpha = timeline.alphaMultiplier;
     const glowStrength = timeline.glowMultiplier;
@@ -213,13 +283,14 @@ export const drawScene = (
   sceneConfig.stars.forEach((star) => {
     const timeline = getNodeTimelineState(star, sceneConfig, currentTimestamp);
     if (!timeline.isVisible) return;
+    const starPos = getStarPositionAtTime(star, sceneConfig, currentTimestamp);
     star.satellites.forEach((sat) => {
-      const sx = star.x + Math.cos(sat.angleOffset) * sat.radius;
-      const sy = star.y + Math.sin(sat.angleOffset) * sat.radius;
+      const sx = starPos.x + Math.cos(sat.angleOffset) * sat.radius;
+      const sy = starPos.y + Math.sin(sat.angleOffset) * sat.radius;
       p.noFill();
       p.stroke(255, 255, 255, 8 * timeline.alphaMultiplier);
       p.strokeWeight(0.4);
-      p.ellipse(star.x, star.y, sat.radius * 2, sat.radius * 2);
+      p.ellipse(starPos.x, starPos.y, sat.radius * 2, sat.radius * 2);
       p.noStroke();
       p.fill(star.planetColor[0], star.planetColor[1], star.planetColor[2], 150 * timeline.alphaMultiplier);
       p.circle(sx, sy, sat.size);
@@ -227,4 +298,29 @@ export const drawScene = (
       p.circle(sx - sat.size * 0.25, sy - sat.size * 0.25, sat.size * 0.35);
     });
   });
+
+  // Update and draw active explosion particles
+  if (anyScene.explosions && anyScene.explosions.length > 0) {
+    anyScene.explosions.forEach((pt: any) => {
+      pt.x += pt.vx;
+      pt.y += pt.vy;
+      pt.vx *= 0.975; // gentler drag (was 0.96) for further drifting
+      pt.vy *= 0.975;
+      pt.alpha -= pt.decay;
+    });
+
+    anyScene.explosions.forEach((pt: any) => {
+      if (pt.alpha <= 0) return;
+      p.noStroke();
+      p.fill(pt.color[0], pt.color[1], pt.color[2], pt.alpha);
+      p.circle(pt.x, pt.y, pt.size);
+      // Small glow ring
+      p.fill(pt.color[0], pt.color[1], pt.color[2], pt.alpha * 0.25);
+      p.circle(pt.x, pt.y, pt.size * 2.2);
+    });
+
+    anyScene.explosions = anyScene.explosions.filter((pt: any) => pt.alpha > 0);
+  }
+
+  p.pop();
 };

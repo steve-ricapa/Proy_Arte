@@ -6,7 +6,7 @@ import TimelineControls from "./timeline/TimelineControls";
 import { useArtworkExport } from "./hooks/useArtworkExport";
 import { buildSceneConfig } from "./scene/buildSceneConfig";
 import { drawScene } from "./render/drawScene";
-import { isNodeVisibleAtTime } from "./timeline/temporal";
+import { getStarPositionAtTime, isNodeVisibleAtTime } from "./timeline/temporal";
 import { InstagramAnalysisPayload, SceneConfig, StarNode } from "./types/artwork.types";
 
 type DigitalExposureArtworkProps = {
@@ -23,6 +23,8 @@ type SketchProps = {
   onIntroReady: () => void;
   onSceneReady: (scene: SceneConfig) => void;
   currentTimestamp: number;
+  isFullscreen: boolean;
+  isScrubbing: boolean;
 };
 
 type TimelineMeta = {
@@ -32,9 +34,10 @@ type TimelineMeta = {
   timelineEndMs: number;
 };
 
-const FALLBACK_WIDTH = 900;
-const FALLBACK_HEIGHT = 900;
-const TIMELINE_DURATION_MS = 18000;
+const ASPECT_RATIO = 16 / 9;
+const FALLBACK_WIDTH = 1280;
+const FALLBACK_HEIGHT = 720;
+const TIMELINE_DURATION_MS = 36000;
 
 const formatTimelineDate = (timestamp: number) => {
   if (!timestamp || Number.isNaN(timestamp)) return "No date";
@@ -45,12 +48,21 @@ const formatTimelineDate = (timestamp: number) => {
   });
 };
 
+const getInitialTimelineProgress = (timelineMeta: TimelineMeta | null) => {
+  if (!timelineMeta) return 0;
+  const total = Math.max(1, timelineMeta.timelineEndMs - timelineMeta.timelineStartMs);
+  const firstPostProgress = (timelineMeta.oldestPostMs - timelineMeta.timelineStartMs) / total;
+  return Math.min(1, Math.max(0, firstPostProgress + 0.015));
+};
+
 const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
   let onHover: ((node: StarNode | null) => void) | null = null;
   let onIntroReady: (() => void) | null = null;
   let onSceneReady: ((scene: SceneConfig) => void) | null = null;
   let payload: InstagramAnalysisPayload | null = null;
   let currentTimestamp = 0;
+  let isFullscreen = false;
+  let isScrubbing = false;
   let cw = FALLBACK_WIDTH;
   let ch = FALLBACK_HEIGHT;
 
@@ -59,6 +71,41 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
   let phaseTick = 0;
   let hoveredNode: StarNode | null = null;
   let introAnnounced = false;
+  let zoom = 1;
+  let panX = 0;
+  let panY = 0;
+  let isPanning = false;
+  let panStartMouseX = 0;
+  let panStartMouseY = 0;
+  let panOriginX = 0;
+  let panOriginY = 0;
+
+  const screenToWorld = (screenX: number, screenY: number) => ({
+    x: (screenX - panX) / zoom,
+    y: (screenY - panY) / zoom,
+  });
+
+  const clampPan = () => {
+    if (zoom <= 1) {
+      panX = 0;
+      panY = 0;
+      return;
+    }
+
+    const scaledW = cw * zoom;
+    const scaledH = ch * zoom;
+    const minPanX = cw - scaledW;
+    const minPanY = ch - scaledH;
+    panX = Math.min(0, Math.max(minPanX, panX));
+    panY = Math.min(0, Math.max(minPanY, panY));
+  };
+
+  const resetView = () => {
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+    isPanning = false;
+  };
 
   p.setup = () => {
     p.createCanvas(cw, ch);
@@ -84,11 +131,18 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
     onIntroReady = props.onIntroReady || null;
     onSceneReady = props.onSceneReady || null;
     currentTimestamp = props.currentTimestamp;
+    isFullscreen = props.isFullscreen;
+    isScrubbing = props.isScrubbing;
     cw = nextWidth;
     ch = nextHeight;
 
     if (sizeChanged) {
       p.resizeCanvas(cw, ch);
+      clampPan();
+    }
+
+    if (!isFullscreen) {
+      resetView();
     }
 
     if (payloadChanged || sizeChanged || !sceneConfig) {
@@ -118,7 +172,7 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
     if (!payload || !sceneConfig) return;
 
     if (phase < 5) {
-      drawScene(p, sceneConfig, phase, phaseTick, cw, ch, sceneConfig.timelineStartMs);
+      drawScene(p, sceneConfig, phase, phaseTick, cw, ch, sceneConfig.timelineStartMs, { zoom, panX, panY });
       phaseTick += 1;
       if (phaseTick > 24 && phase < 5) {
         phase += 1;
@@ -131,19 +185,24 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
       return;
     }
 
-    drawScene(p, sceneConfig, phase, phaseTick, cw, ch, currentTimestamp);
+    drawScene(p, sceneConfig, phase, phaseTick, cw, ch, currentTimestamp, { zoom, panX, panY });
 
-    if (!hoveredNode) {
+    const anyScene = sceneConfig as any;
+    const hasExplosions = anyScene.explosions && anyScene.explosions.length > 0;
+    if (!hoveredNode && !hasExplosions) {
       p.noLoop();
     }
   };
 
   p.mouseMoved = () => {
-    if (phase < 5 || !sceneConfig) return;
+    if (phase < 5 || !sceneConfig || isScrubbing) return;
+    if (isPanning) return;
+    const point = screenToWorld(p.mouseX, p.mouseY);
     let found: StarNode | null = null;
     for (const star of sceneConfig.stars) {
       if (!isNodeVisibleAtTime(star, sceneConfig, currentTimestamp)) continue;
-      const d = p.dist(p.mouseX, p.mouseY, star.x, star.y);
+      const position = getStarPositionAtTime(star, sceneConfig, currentTimestamp);
+      const d = p.dist(point.x, point.y, position.x, position.y);
       if (d < star.radius + 15) {
         found = star;
         break;
@@ -156,17 +215,68 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
       p.loop();
     }
   };
+
+  p.mousePressed = () => {
+    if (!isFullscreen || phase < 5 || isScrubbing || p.mouseButton !== p.LEFT) return;
+    isPanning = true;
+    panStartMouseX = p.mouseX;
+    panStartMouseY = p.mouseY;
+    panOriginX = panX;
+    panOriginY = panY;
+  };
+
+  p.mouseDragged = () => {
+    if (!isPanning || !isFullscreen || isScrubbing) return;
+    panX = panOriginX + (p.mouseX - panStartMouseX);
+    panY = panOriginY + (p.mouseY - panStartMouseY);
+    clampPan();
+    if (hoveredNode !== null) {
+      hoveredNode = null;
+      if (onHover) onHover(null);
+    }
+    p.loop();
+  };
+
+  p.mouseReleased = () => {
+    isPanning = false;
+  };
+
+  p.doubleClicked = () => {
+    if (!isFullscreen) return;
+    resetView();
+    p.loop();
+  };
+
+  p.mouseWheel = (event) => {
+    if (!isFullscreen || phase < 5 || isScrubbing) return undefined;
+    const zoomFactor = event.delta > 0 ? 0.92 : 1.08;
+    const nextZoom = Math.min(3, Math.max(1, zoom * zoomFactor));
+    if (nextZoom === zoom) return false;
+
+    const worldBefore = screenToWorld(p.mouseX, p.mouseY);
+    zoom = nextZoom;
+    panX = p.mouseX - worldBefore.x * zoom;
+    panY = p.mouseY - worldBefore.y * zoom;
+    clampPan();
+    p.loop();
+    return false;
+  };
 };
 
 export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, height = FALLBACK_HEIGHT }: DigitalExposureArtworkProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const canvasFrameRef = useRef<HTMLDivElement>(null);
   const payload = useMemo(() => data, [data]);
-  const handleExport = useArtworkExport(containerRef, data.username || "profile");
+  const handleExport = useArtworkExport(canvasFrameRef, data.username || "profile");
   const [hoveredStar, setHoveredStar] = useState<StarNode | null>(null);
   const [timelineProgress, setTimelineProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isTimelineReady, setIsTimelineReady] = useState(false);
   const [timelineMeta, setTimelineMeta] = useState<TimelineMeta | null>(null);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [resumeAfterScrub, setResumeAfterScrub] = useState(false);
+  const [canvasSize, setCanvasSize] = useState({ width, height });
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const currentTimestamp = useMemo(() => {
     if (!timelineMeta) return 0;
@@ -179,10 +289,62 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
     setIsPlaying(false);
     setIsTimelineReady(false);
     setTimelineMeta(null);
+    setIsScrubbing(false);
+    setResumeAfterScrub(false);
   }, [data]);
 
   useEffect(() => {
-    if (!isPlaying || !isTimelineReady) return;
+    const measureCanvas = () => {
+      const stageEl = stageRef.current;
+      const el = canvasFrameRef.current;
+      if (!el) return;
+
+      let nextWidth = stageEl?.clientWidth || el.clientWidth || width;
+      let nextHeight = Math.round(nextWidth / ASPECT_RATIO);
+
+      if (stageEl && document.fullscreenElement === stageEl) {
+        const stageWidth = Math.max(480, stageEl.clientWidth - 48);
+        const stageHeight = Math.max(320, stageEl.clientHeight - 140);
+        if (stageWidth / stageHeight > ASPECT_RATIO) {
+          nextHeight = stageHeight;
+          nextWidth = Math.round(nextHeight * ASPECT_RATIO);
+        } else {
+          nextWidth = stageWidth;
+          nextHeight = Math.round(stageWidth / ASPECT_RATIO);
+        }
+      }
+
+      setCanvasSize((prev) => {
+        if (prev.width === nextWidth && prev.height === nextHeight) return prev;
+        return { width: nextWidth, height: nextHeight };
+      });
+    };
+
+    const observer = new ResizeObserver(() => measureCanvas());
+    if (canvasFrameRef.current) {
+      observer.observe(canvasFrameRef.current);
+    }
+    if (stageRef.current) {
+      observer.observe(stageRef.current);
+    }
+
+    window.addEventListener("resize", measureCanvas);
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === stageRef.current);
+      measureCanvas();
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    measureCanvas();
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measureCanvas);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, [width]);
+
+  useEffect(() => {
+    if (!isPlaying || !isTimelineReady || isScrubbing) return;
 
     let frameId = 0;
     let last = performance.now();
@@ -202,7 +364,7 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [isPlaying, isTimelineReady]);
+  }, [isPlaying, isTimelineReady, isScrubbing]);
 
   useEffect(() => {
     if (hoveredStar) {
@@ -210,14 +372,23 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
     }
   }, [hoveredStar]);
 
+  useEffect(() => {
+    if (!timelineMeta || !isTimelineReady || timelineProgress > 0) return;
+    setTimelineProgress(getInitialTimelineProgress(timelineMeta));
+  }, [timelineMeta, isTimelineReady, timelineProgress]);
+
   const handleHover = useCallback((node: StarNode | null) => {
     setHoveredStar(node);
   }, []);
 
   const handleIntroReady = useCallback(() => {
     setIsTimelineReady(true);
+    setTimelineProgress((prev) => {
+      if (prev > 0) return prev;
+      return getInitialTimelineProgress(timelineMeta);
+    });
     setIsPlaying(true);
-  }, []);
+  }, [timelineMeta]);
 
   const handleSceneReady = useCallback((scene: SceneConfig) => {
     setTimelineMeta({
@@ -230,36 +401,51 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
 
   const handleTimelineChange = useCallback((value: number) => {
     setTimelineProgress(value);
-    setIsPlaying(false);
   }, []);
 
+  const handleScrubStart = useCallback(() => {
+    setResumeAfterScrub(isPlaying);
+    setIsPlaying(false);
+    setIsScrubbing(true);
+  }, [isPlaying]);
+
+  const handleScrubEnd = useCallback(() => {
+    setIsScrubbing(false);
+    if (resumeAfterScrub && timelineProgress < 1) {
+      setIsPlaying(true);
+    }
+    setResumeAfterScrub(false);
+  }, [resumeAfterScrub, timelineProgress]);
+
   const handleResetTimeline = useCallback(() => {
-    setTimelineProgress(0);
+    setTimelineProgress(getInitialTimelineProgress(timelineMeta));
     setHoveredStar(null);
     setIsPlaying(false);
-  }, []);
+    setIsScrubbing(false);
+    setResumeAfterScrub(false);
+  }, [timelineMeta]);
 
   const handleTogglePlay = useCallback(() => {
     if (!isTimelineReady) return;
     setIsPlaying((prev) => {
       if (timelineProgress >= 1) {
-        setTimelineProgress(0);
+        setTimelineProgress(getInitialTimelineProgress(timelineMeta));
         return true;
       }
       return !prev;
     });
-  }, [isTimelineReady, timelineProgress]);
+  }, [isTimelineReady, timelineMeta, timelineProgress]);
 
   const handleFullscreen = () => {
-    if (containerRef.current) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        containerRef.current.requestFullscreen().catch((err) => {
-          console.error("Error attempting to enable fullscreen:", err);
-        });
-      }
+    const element = stageRef.current;
+    if (!element) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+      return;
     }
+    element.requestFullscreen().catch((err) => {
+      console.error("Error attempting to enable fullscreen:", err);
+    });
   };
 
   return (
@@ -300,32 +486,63 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
         </div>
       </div>
 
-      <div className="flex gap-4 items-start">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
         <div className="min-w-0 flex-1">
-          <div ref={containerRef} className="fullscreen-canvas-wrapper overflow-hidden rounded-xl border border-white/10 bg-[#030408] flex-shrink-0 shadow-inner">
+          <div ref={stageRef} className={`fullscreen-stage ${isFullscreen ? "is-fullscreen" : ""}`}>
+          <div
+            ref={canvasFrameRef}
+            className="fullscreen-canvas-wrapper aspect-video w-full overflow-hidden rounded-xl border border-white/10 bg-[#030408] shadow-inner"
+            style={isFullscreen ? { width: `${canvasSize.width}px`, height: `${canvasSize.height}px`, maxWidth: "100%" } : undefined}
+          >
             <ReactP5Wrapper
               sketch={sketch}
               payload={payload}
-              width={width}
-              height={height}
+              width={canvasSize.width}
+              height={canvasSize.height}
               onHover={handleHover}
               onIntroReady={handleIntroReady}
               onSceneReady={handleSceneReady}
               currentTimestamp={currentTimestamp}
+              isFullscreen={isFullscreen}
+              isScrubbing={isScrubbing}
             />
           </div>
 
-          <TimelineControls
-            progress={timelineProgress}
-            onProgressChange={handleTimelineChange}
-            isPlaying={isPlaying}
-            onTogglePlay={handleTogglePlay}
-            onReset={handleResetTimeline}
-            currentLabel={formatTimelineDate(currentTimestamp)}
-            startLabel={formatTimelineDate(timelineMeta?.oldestPostMs || 0)}
-            endLabel={formatTimelineDate(timelineMeta?.newestPostMs || 0)}
-            disabled={!isTimelineReady || !timelineMeta}
-          />
+          {isFullscreen ? (
+            <div className="fullscreen-stage__controls">
+              <TimelineControls
+                progress={timelineProgress}
+                onProgressChange={handleTimelineChange}
+                onScrubStart={handleScrubStart}
+                onScrubEnd={handleScrubEnd}
+                isPlaying={isPlaying}
+                onTogglePlay={handleTogglePlay}
+                onReset={handleResetTimeline}
+                currentLabel={formatTimelineDate(currentTimestamp)}
+                startLabel={formatTimelineDate(timelineMeta?.oldestPostMs || 0)}
+                endLabel={formatTimelineDate(timelineMeta?.newestPostMs || 0)}
+                disabled={!isTimelineReady || !timelineMeta}
+                className="mt-0 border-white/15 bg-black/65 backdrop-blur-md"
+              />
+            </div>
+          ) : null}
+          </div>
+
+          {!isFullscreen ? (
+            <TimelineControls
+              progress={timelineProgress}
+              onProgressChange={handleTimelineChange}
+              onScrubStart={handleScrubStart}
+              onScrubEnd={handleScrubEnd}
+              isPlaying={isPlaying}
+              onTogglePlay={handleTogglePlay}
+              onReset={handleResetTimeline}
+              currentLabel={formatTimelineDate(currentTimestamp)}
+              startLabel={formatTimelineDate(timelineMeta?.oldestPostMs || 0)}
+              endLabel={formatTimelineDate(timelineMeta?.newestPostMs || 0)}
+              disabled={!isTimelineReady || !timelineMeta}
+            />
+          ) : null}
         </div>
 
         <HoverInfoPanel star={hoveredStar} />
@@ -339,103 +556,30 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-mono text-[11px] text-slate-300">
           <div className="bg-slate-900/40 p-4 rounded-xl border border-white/5 space-y-3 shadow-inner">
-            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">
-              CUERPOS CELESTES (POSTS)
-            </p>
+            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">CUERPOS CELESTES (POSTS)</p>
             <div className="space-y-2">
-              <div className="flex items-start gap-2.5">
-                <span className="relative flex-shrink-0 w-3 h-3 rounded-full bg-purple-600 border border-purple-400 mt-0.5 overflow-hidden">
-                  <span className="absolute inset-x-0 top-1.5 h-0.5 bg-purple-200 opacity-60" />
-                </span>
-                <div>
-                  <strong className="text-white block font-medium">Gigante Gaseoso</strong>
-                  <span className="text-slate-400 text-[10px]">Posts de alcance rapido y traccion impulsiva.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="relative flex-shrink-0 w-3 h-3 rounded-full bg-blue-500 mt-0.5">
-                  <span className="absolute -inset-1 border border-blue-300/40 rounded-full scale-[1.3] rotate-12" />
-                </span>
-                <div>
-                  <strong className="text-white block font-medium">Planeta Anillado</strong>
-                  <span className="text-slate-400 text-[10px]">Posts con menciones activas y resonancia social.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="flex-shrink-0 w-3 h-3 rounded-full bg-indigo-600 border border-indigo-400 mt-0.5 relative">
-                  <span className="absolute top-0.5 left-0.5 w-1 h-1 bg-black/40 rounded-full" />
-                  <span className="absolute bottom-0.5 right-0.5 w-0.5 h-0.5 bg-black/40 rounded-full" />
-                </span>
-                <div>
-                  <strong className="text-white block font-medium">Cuerpo Rocoso</strong>
-                  <span className="text-slate-400 text-[10px]">Posts directos, organicos y de materia visual mas densa.</span>
-                </div>
-              </div>
+              <div className="flex items-start gap-2.5"><span className="relative flex-shrink-0 w-3 h-3 rounded-full bg-purple-600 border border-purple-400 mt-0.5 overflow-hidden"><span className="absolute inset-x-0 top-1.5 h-0.5 bg-purple-200 opacity-60" /></span><div><strong className="text-white block font-medium">Gigante Gaseoso</strong><span className="text-slate-400 text-[10px]">Posts de alcance rapido y traccion impulsiva.</span></div></div>
+              <div className="flex items-start gap-2.5"><span className="relative flex-shrink-0 w-3 h-3 rounded-full bg-blue-500 mt-0.5"><span className="absolute -inset-1 border border-blue-300/40 rounded-full scale-[1.3] rotate-12" /></span><div><strong className="text-white block font-medium">Planeta Anillado</strong><span className="text-slate-400 text-[10px]">Posts con menciones activas y resonancia social.</span></div></div>
+              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-indigo-600 border border-indigo-400 mt-0.5 relative"><span className="absolute top-0.5 left-0.5 w-1 h-1 bg-black/40 rounded-full" /><span className="absolute bottom-0.5 right-0.5 w-0.5 h-0.5 bg-black/40 rounded-full" /></span><div><strong className="text-white block font-medium">Cuerpo Rocoso</strong><span className="text-slate-400 text-[10px]">Posts directos, organicos y de materia visual mas densa.</span></div></div>
             </div>
           </div>
 
           <div className="bg-slate-900/40 p-4 rounded-xl border border-white/5 space-y-3 shadow-inner">
-            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">
-              CODICES CROMATICOS (HASHTAGS)
-            </p>
+            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">CODICES CROMATICOS (HASHTAGS)</p>
             <div className="space-y-2">
-              <div className="flex items-start gap-2.5">
-                <span className="flex-shrink-0 w-3 h-3 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.5)] mt-0.5" />
-                <div>
-                  <strong className="text-[#c7d2fe] block font-medium">Cobalto Profundo</strong>
-                  <span className="text-slate-400 text-[10px]">Temas de tecnologia, profesion, ciencia o trayectorias de largo alcance.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="flex-shrink-0 w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_6px_rgba(168,85,247,0.5)] mt-0.5" />
-                <div>
-                  <strong className="text-[#e9d5ff] block font-medium">Violeta Estelar</strong>
-                  <span className="text-slate-400 text-[10px]">Marca personal, arte digital y atmosferas de alta exposicion.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="flex-shrink-0 w-3 h-3 rounded-full bg-fuchsia-500 shadow-[0_0_6px_rgba(217,70,239,0.5)] mt-0.5" />
-                <div>
-                  <strong className="text-[#f5d0fe] block font-medium">Bronce Rosado</strong>
-                  <span className="text-slate-400 text-[10px]">Reflexiones personales, cercania afectiva y estetica relacional.</span>
-                </div>
-              </div>
+              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.5)] mt-0.5" /><div><strong className="text-[#c7d2fe] block font-medium">Cobalto Profundo</strong><span className="text-slate-400 text-[10px]">Temas de tecnologia, profesion, ciencia o trayectorias de largo alcance.</span></div></div>
+              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_6px_rgba(168,85,247,0.5)] mt-0.5" /><div><strong className="text-[#e9d5ff] block font-medium">Violeta Estelar</strong><span className="text-slate-400 text-[10px]">Marca personal, arte digital y atmosferas de alta exposicion.</span></div></div>
+              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-fuchsia-500 shadow-[0_0_6px_rgba(217,70,239,0.5)] mt-0.5" /><div><strong className="text-[#f5d0fe] block font-medium">Bronce Rosado</strong><span className="text-slate-400 text-[10px]">Reflexiones personales, cercania afectiva y estetica relacional.</span></div></div>
             </div>
           </div>
 
           <div className="bg-slate-900/40 p-4 rounded-xl border border-white/5 space-y-3 shadow-inner">
-            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">
-              CARTOGRAFIA DE METRICAS
-            </p>
+            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">CARTOGRAFIA DE METRICAS</p>
             <div className="space-y-2">
-              <div className="flex items-start gap-2">
-                <span className="text-[12px] mt-0.5">M</span>
-                <div>
-                  <strong className="text-white block font-medium">Masa Planetaria</strong>
-                  <span className="text-slate-400 text-[10px]">El radio del planeta representa la fuerza gravitacional del post en likes.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-[12px] mt-0.5">A</span>
-                <div>
-                  <strong className="text-white block font-medium">Aura y Halos</strong>
-                  <span className="text-slate-400 text-[10px]">La intensidad exterior traduce el volumen de comentarios.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-[12px] mt-0.5">S</span>
-                <div>
-                  <strong className="text-white block font-medium">Satelites</strong>
-                  <span className="text-slate-400 text-[10px]">Las menciones orbitan como pequenos cuerpos asociados a cada publicacion.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-[12px] mt-0.5">T</span>
-                <div>
-                  <strong className="text-white block font-medium">Tiempo</strong>
-                  <span className="text-slate-400 text-[10px]">La timeline activa o apaga gradualmente la presencia de cada planeta segun su fecha.</span>
-                </div>
-              </div>
+              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">M</span><div><strong className="text-white block font-medium">Masa Planetaria</strong><span className="text-slate-400 text-[10px]">El radio del planeta representa la fuerza gravitacional del post en likes.</span></div></div>
+              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">A</span><div><strong className="text-white block font-medium">Aura y Halos</strong><span className="text-slate-400 text-[10px]">La intensidad exterior traduce el volumen de comentarios.</span></div></div>
+              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">S</span><div><strong className="text-white block font-medium">Satelites</strong><span className="text-slate-400 text-[10px]">Las menciones orbitan como pequenos cuerpos asociados a cada publicacion.</span></div></div>
+              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">T</span><div><strong className="text-white block font-medium">Tiempo</strong><span className="text-slate-400 text-[10px]">La timeline activa o apaga gradualmente la presencia de cada planeta segun su fecha.</span></div></div>
             </div>
           </div>
         </div>

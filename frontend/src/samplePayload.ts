@@ -1,103 +1,98 @@
-const samplePayload = {
-  source: "apify",
-  status: "success",
+import { InstagramAnalysisPayload } from "./components/artwork/types/artwork.types";
+
+const hashtagsPool = [
+  ["digitalritual", "citysignal"],
+  ["neonmemory", "selfarchive"],
+  ["visiblematter", "nightfeed"],
+  ["socialorbit", "afterimage"],
+  ["networkedbody", "signalbloom"],
+  ["attentioneconomy", "violettrace"],
+];
+
+const mentionsPool = [
+  ["demo.lima", "juan_luismt_"],
+  ["galeria.utec", "archivo.visible"],
+  ["lima.nocturna"],
+  ["demo.mas.lima", "luz.publica"],
+  ["sistema.celeste"],
+  ["protocolo.social", "demo.lima"],
+];
+
+const captions = [
+  "Una prueba mas de presencia en el flujo nocturno.",
+  "Publicar para permanecer visible entre miles de senales.",
+  "La ciudad como interfaz, el cuerpo como emision.",
+  "Cada imagen deja un residuo de luz en la memoria social.",
+  "Una orbita breve antes del siguiente desplazamiento del feed.",
+  "Brillar tambien puede ser una forma de cansancio.",
+];
+
+const posts = Array.from({ length: 30 }).map((_, idx) => {
+  const timestamp = new Date(Date.UTC(2025, 0, 12 + idx * 9, 14, (idx * 11) % 60, 0)).toISOString();
+  const likes = 180 + (idx % 6) * 95 + idx * 34 + (idx % 4) * 20;
+  const comments = 6 + (idx % 5) * 4 + Math.floor(idx / 3);
+  const hashtags = hashtagsPool[idx % hashtagsPool.length];
+  const mentions = mentionsPool[idx % mentionsPool.length];
+
+  return {
+    id: `demo-post-${idx + 1}`,
+    caption: `${captions[idx % captions.length]} Registro ${idx + 1}.`,
+    likes_count: likes,
+    comments_count: comments,
+    hashtags,
+    mentions,
+    owner_username: "demo.lima",
+    owner_full_name: "demo Lima",
+    timestamp,
+    url: `https://www.instagram.com/p/demo-post-${idx + 1}`,
+  };
+});
+
+const totalLikes = posts.reduce((sum, post) => sum + (post.likes_count || 0), 0);
+const totalComments = posts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
+const bestPostByLikes = posts.reduce((best, post) => ((post.likes_count || 0) > (best.likes_count || 0) ? post : best), posts[0]);
+const bestPostByComments = posts.reduce((best, post) => ((post.comments_count || 0) > (best.comments_count || 0) ? post : best), posts[0]);
+
+const countValues = (values: string[]) => {
+  const counts = new Map<string, number>();
+  values.forEach((value) => counts.set(value, (counts.get(value) || 0) + 1));
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([value, count]) => ({ value, count }));
+};
+
+const topHashtags = countValues(posts.flatMap((post) => post.hashtags || [])).slice(0, 6);
+const topMentions = countValues(posts.flatMap((post) => post.mentions || [])).slice(0, 6);
+
+const samplePayload: InstagramAnalysisPayload = {
   username: "demo.lima",
   generated_at: "2026-04-10T10:30:00.000Z",
   metadata: {
     username: "demo.lima",
     full_name: "demo Lima",
-    biography: "",
-    followers: 0,
-    followees: 0,
-    is_verified: false,
-    posts_count: 12,
-    source: "apify",
+    followers: 4200,
+    following: 612,
   },
   metrics: {
-    followers: 0,
-    following: 0,
-    ratio: 0,
-    post_frequency: 0.55,
-    avg_engagement: 466.17,
-    captions_count: 12,
-    top_hashtags: [{ hashtag: "vamoscontodo", count: 2 }],
+    followers: 4200,
+    following: 612,
+    ratio: 6.86,
+    avg_engagement: Number((totalLikes / posts.length).toFixed(2)),
+    top_hashtags: topHashtags.map((tag) => ({ hashtag: tag.value, count: tag.count })),
   },
   analysis: {
-    total_posts_analyzed: 3,
-    total_likes: 5395,
-    total_comments: 199,
-    avg_likes: 449.58,
-    avg_comments: 16.58,
-    top_hashtags: [
-      { value: "gastronumus", count: 1 },
-      { value: "gastroart", count: 1 },
-    ],
-    top_mentions: [
-      { value: "juan_luismt_", count: 4 },
-      { value: "demo.mas.lima", count: 2 },
-    ],
-    best_post_by_likes: {
-      id: "a1",
-      likes_count: 1434,
-      comments_count: 50,
-      hashtags: ["gastronumus", "gastroart"],
-      mentions: ["demo.lima"],
-      timestamp: "2026-04-09T16:53:47.000Z",
-    },
-    best_post_by_comments: {
-      id: "a1",
-      likes_count: 1434,
-      comments_count: 50,
-      hashtags: ["gastronumus", "gastroart"],
-      mentions: ["demo.lima"],
-      timestamp: "2026-04-09T16:53:47.000Z",
-    },
-    posts: [
-      {
-        id: "a1",
-        caption: "Post 1",
-        likes_count: 1434,
-        comments_count: 50,
-        hashtags: ["gastronumus", "gastroart"],
-        mentions: ["demo.lima", "juan_luismt_"],
-        owner_username: "demo.lima",
-        owner_full_name: "demo Lima",
-        timestamp: "2026-04-09T16:53:47.000Z",
-        url: "https://www.instagram.com/p/a1",
-      },
-      {
-        id: "a2",
-        caption: "Post 2",
-        likes_count: 520,
-        comments_count: 14,
-        hashtags: ["chefstalk"],
-        mentions: ["juan_luismt_"],
-        owner_username: "demo.lima",
-        owner_full_name: "demo Lima",
-        timestamp: "2026-03-25T10:00:00.000Z",
-        url: "https://www.instagram.com/p/a2",
-      },
-      {
-        id: "a3",
-        caption: "Post 3",
-        likes_count: 180,
-        comments_count: 6,
-        hashtags: ["vamoscontodo"],
-        mentions: ["demo.mas.lima"],
-        owner_username: "demo.lima",
-        owner_full_name: "demo Lima",
-        timestamp: "2026-02-10T12:00:00.000Z",
-        url: "https://www.instagram.com/p/a3",
-      },
-    ],
+    avg_likes: Number((totalLikes / posts.length).toFixed(2)),
+    avg_comments: Number((totalComments / posts.length).toFixed(2)),
+    top_hashtags: topHashtags,
+    top_mentions: topMentions,
+    best_post_by_likes: bestPostByLikes,
+    best_post_by_comments: bestPostByComments,
+    posts,
   },
-  posts: [],
+  posts,
   render_hints: {
     seed: "demo.lima:seed",
-    node_count: 9,
-    energy: 466.17,
-    dominant_hashtag: "gastronumus",
-    post_density: 0.55,
+    energy: Number((totalLikes / posts.length).toFixed(2)),
   },
 };
 

@@ -4,10 +4,13 @@ type TimelineControlsProps = {
   isPlaying: boolean;
   onTogglePlay: () => void;
   onReset: () => void;
+  onScrubStart: () => void;
+  onScrubEnd: () => void;
   currentLabel: string;
   startLabel: string;
   endLabel: string;
   disabled?: boolean;
+  className?: string;
 };
 
 export default function TimelineControls({
@@ -16,13 +19,22 @@ export default function TimelineControls({
   isPlaying,
   onTogglePlay,
   onReset,
+  onScrubStart,
+  onScrubEnd,
   currentLabel,
   startLabel,
   endLabel,
   disabled = false,
+  className = "",
 }: TimelineControlsProps) {
   return (
-    <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-4 shadow-inner">
+    <div
+      className={`mt-5 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-4 shadow-inner ${className}`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onPointerMove={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
+      onWheel={(event) => event.stopPropagation()}
+    >
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-purple-200/80">Temporal Reader</p>
@@ -58,6 +70,9 @@ export default function TimelineControls({
           value={progress}
           disabled={disabled}
           onChange={(event) => onProgressChange(Number(event.target.value))}
+          onPointerDown={onScrubStart}
+          onPointerUp={onScrubEnd}
+          onPointerCancel={onScrubEnd}
           className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-purple-400 disabled:cursor-not-allowed disabled:opacity-40"
         />
         <div className="mt-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.18em] text-slate-500">

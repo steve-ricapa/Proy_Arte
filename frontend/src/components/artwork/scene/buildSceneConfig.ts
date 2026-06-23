@@ -12,10 +12,12 @@ export const buildSceneConfig = (
 ): SceneConfig => {
   const seed = `${payload.username}:${payload.render_hints?.seed || payload.generated_at || "exhibition-seed"}`;
   const prng = new SeededPRNG(seed);
+  const canvasScale = Math.max(0.8, Math.min(1.8, Math.min(cw, ch) / 720));
 
   const posts = normalizePosts(payload, prng);
   const maxLikes = Math.max(1, ...posts.map(getLikes));
   const maxComments = Math.max(1, ...posts.map(getComments));
+  const totalLikes = posts.reduce((sum, post) => sum + getLikes(post), 0);
 
   let bestPostByLikes = payload.analysis?.best_post_by_likes;
   let bestPostByComments = payload.analysis?.best_post_by_comments;
@@ -33,18 +35,19 @@ export const buildSceneConfig = (
   const newest = Math.max(...resolvedTimestamps);
   const oldest = Math.min(...resolvedTimestamps);
   const rawRange = Math.max(1, newest - oldest);
-  const timelinePadding = Math.max(rawRange * 0.08, 1000 * 60 * 60 * 24 * 7);
+  const timelinePadding = Math.max(rawRange * 0.03, 1000 * 60 * 60 * 24);
   const timelineStartMs = oldest - timelinePadding;
   const timelineEndMs = newest;
 
   const mainTag = payload.analysis?.top_hashtags?.[0]?.value || "";
   const palette = getProfilePalette(mainTag, payload.username);
 
-  const bgStars = Array.from({ length: 180 }).map(() => ({
+  const bgStarCount = Math.max(70, Math.min(220, Math.round(Math.log10(totalLikes + 10) * 42)));
+  const bgStars = Array.from({ length: bgStarCount }).map(() => ({
     x: prng.range(30, cw - 30),
     y: prng.range(30, ch - 30),
-    r: prng.range(0.4, 2.2),
-    a: prng.range(12, 55),
+    r: prng.range(0.45, 2.6),
+    a: prng.range(18, 110),
   }));
 
   const energy = Number(payload.metrics?.avg_engagement || payload.render_hints?.energy || 150);
@@ -103,7 +106,7 @@ export const buildSceneConfig = (
     const commentRatio = comments / maxComments;
     const t = resolvedTimestamps[idx];
     const recencyRatio = newest > oldest ? (newest - t) / (newest - oldest) : prng.next();
-    const baseDistance = p.map(recencyRatio, 0, 1, 95, Math.min(cw, ch) * 0.4);
+    const baseDistance = p.map(recencyRatio, 0, 1, 3, Math.min(cw, ch) * 0.08);
     const angle = idx * 2.39996 + prng.range(-0.06, 0.06);
     const starX = cw / 2 + Math.cos(angle) * baseDistance;
     const starY = ch / 2 + Math.sin(angle) * baseDistance;
@@ -112,8 +115,8 @@ export const buildSceneConfig = (
     const mentionCount = Math.min(4, post.mentions?.length || 0);
     const satellites = Array.from({ length: mentionCount }).map((_, mIdx) => ({
       angleOffset: (mIdx / Math.max(1, mentionCount)) * p.TWO_PI + prng.range(0, p.HALF_PI),
-      radius: 15 + prng.range(6, 17),
-      size: prng.range(2.5, 5),
+      radius: (15 + prng.range(6, 17)) * canvasScale,
+      size: prng.range(2.5, 5) * canvasScale,
     }));
 
     const types: PlanetType[] = ["gas_giant", "ringed", "rocky"];
@@ -122,8 +125,11 @@ export const buildSceneConfig = (
       id: post.id || `node-${idx}`,
       x: starX,
       y: starY,
-      radius: p.map(likeRatio, 0, 1, 6, 21),
-      glow: p.map(commentRatio, 0, 1, 15, 42),
+      baseDistance,
+      angle,
+      driftStrength: p.map(likeRatio, 0, 1, 42, Math.min(cw, ch) * 0.22) + prng.range(8, 30),
+      radius: p.map(likeRatio, 0, 1, 6, 21) * canvasScale,
+      glow: p.map(commentRatio, 0, 1, 15, 42) * canvasScale,
       color: nodeColor,
       post,
       timestampMs: t,

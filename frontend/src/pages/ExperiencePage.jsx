@@ -131,11 +131,10 @@ export default function ExperiencePage({ onBack }) {
 
         {payload && (
           <div className="mt-8">
-            <DigitalExposureArtwork data={payload} width={1080} height={1080} />
+            <DigitalExposureArtwork data={payload} />
           </div>
         )}
       </main>
     </div>
   );
 }
-

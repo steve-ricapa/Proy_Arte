@@ -58,6 +58,9 @@ export type StarNode = {
   id: string;
   x: number;
   y: number;
+  baseDistance: number;
+  angle: number;
+  driftStrength: number;
   radius: number;
   glow: number;
   color: [number, number, number];
