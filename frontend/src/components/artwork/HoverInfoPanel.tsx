@@ -7,7 +7,7 @@ type HoverInfoPanelProps = {
 export default function HoverInfoPanel({ star }: HoverInfoPanelProps) {
   if (!star) {
     return (
-      <div className="w-[320px] flex-shrink-0 rounded-xl border border-white/10 bg-[#050712] p-5 shadow-inner">
+      <div className="w-[320px] flex-shrink-0 rounded-xl bg-[#050712]/80 p-5 shadow-inner">
         <p className="text-sm text-slate-400 font-mono tracking-wide">
           Hover a planet to inspect its source post
         </p>
@@ -27,17 +27,8 @@ export default function HoverInfoPanel({ star }: HoverInfoPanelProps) {
   const caption = (post.caption || "No caption").replace(/\s+/g, " ").trim();
 
   return (
-    <div className="w-[320px] flex-shrink-0 rounded-xl border border-white/10 bg-[#050712] overflow-hidden shadow-inner">
-      <div className="p-4 border-b border-white/5">
-        <div className="flex items-center gap-2 mb-3">
-          <span
-            className="w-2 h-2 rounded-full"
-            style={{ backgroundColor: planetColorStyle }}
-          />
-          <span className="text-xs font-mono font-semibold text-amber-200/80 tracking-wider">
-            POST ORIGIN
-          </span>
-        </div>
+    <div className="w-[320px] flex-shrink-0 rounded-xl bg-[#050712]/80 overflow-hidden shadow-inner">
+      <div className="p-4">
         <div className="space-y-1.5 font-mono text-xs">
           <p className="text-slate-400">
             DATE: <span className="text-white">{postDate}</span>
@@ -67,10 +58,7 @@ export default function HoverInfoPanel({ star }: HoverInfoPanelProps) {
           </p>
         </div>
       </div>
-      <div className="p-4">
-        <p className="text-xs font-mono font-semibold text-amber-200/80 tracking-wider mb-2">
-          CAPTION
-        </p>
+      <div className="border-t border-white/5 p-4">
         <p className="text-xs font-mono text-slate-300 leading-relaxed">
           {caption.length > 200 ? `${caption.slice(0, 200)}...` : caption}
         </p>

@@ -62,6 +62,8 @@ export type StarNode = {
   glow: number;
   color: [number, number, number];
   post: InstagramPost;
+  timestampMs: number;
+  timeRatio: number;
   likes: number;
   comments: number;
   isBestLikes: boolean;
@@ -86,4 +88,8 @@ export type SceneConfig = {
   technicalGrid: GridLine[];
   compassTicks: CompassTick[];
   catalogNumber: string;
+  oldestPostMs: number;
+  newestPostMs: number;
+  timelineStartMs: number;
+  timelineEndMs: number;
 };

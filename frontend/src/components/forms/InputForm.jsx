@@ -28,34 +28,55 @@ function InputForm({ onSubmit, disabled, helperMessage }) {
   };
 
   return (
-    <form className="glass-panel mt-6 space-y-3 p-4 md:p-5" onSubmit={handleSubmit}>
-      <label htmlFor="username" className="block text-sm font-medium text-slate-200">
-        Instagram username
-      </label>
-      <div className="flex flex-col gap-3 md:flex-row">
-        <input
-          id="username"
-          type="text"
-          placeholder="ej: natgeo"
-          value={username}
-          onBlur={() => setTouched(true)}
-          onChange={(event) => setUsername(event.target.value)}
-          disabled={disabled}
-          className="w-full rounded-xl border border-white/15 bg-slate-950/65 px-4 py-3 text-sm text-slate-100 outline-none ring-0 transition placeholder:text-slate-500 focus:border-amber-300 focus:shadow-[0_0_0_3px_rgba(251,191,36,0.16)]"
-        />
+    <form className="glass-panel mt-8 space-y-4 p-6 md:p-8 relative overflow-hidden" onSubmit={handleSubmit}>
+      {/* Decorative inner elements */}
+      <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-xl pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-xl pointer-events-none" />
+      
+      <div className="flex items-center justify-between border-b border-purple-500/10 pb-3">
+        <label htmlFor="username" className="font-mono text-xs uppercase tracking-[0.2em] text-purple-300 flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-ping" />
+          [ SISTEMA_EXTRACTOR : INGRESO_USUARIO ]
+        </label>
+        <span className="font-mono text-[9px] text-slate-500">v1.2.0-secure</span>
+      </div>
+
+      <div className="flex flex-col gap-4 sm:flex-row items-stretch">
+        <div className="relative flex-1">
+          <input
+            id="username"
+            type="text"
+            placeholder="Introduce usuario de Instagram (ej: natgeo)"
+            value={username}
+            onBlur={() => setTouched(true)}
+            onChange={(event) => setUsername(event.target.value)}
+            disabled={disabled}
+            className="w-full rounded-xl border border-purple-500/20 bg-black/45 px-5 py-4 text-sm text-slate-100 outline-none transition-all duration-300 placeholder:text-slate-500 focus:border-purple-500 focus:bg-slate-950/80 focus:shadow-[0_0_20px_rgba(168,85,247,0.25)] font-mono"
+          />
+          <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[10px] text-purple-400/40 pointer-events-none">
+            @
+          </span>
+        </div>
         <button
           type="submit"
           disabled={disabled}
-          className="rounded-xl bg-gradient-to-r from-amber-300 to-orange-300 px-6 py-3 text-sm font-bold text-slate-900 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-8 py-4 text-sm font-bold text-white tracking-widest uppercase transition-all duration-300 hover:from-purple-500 hover:to-indigo-500 hover:shadow-[0_0_25px_rgba(168,85,247,0.45)] hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {disabled ? "Procesando..." : "Analizar"}
+          {disabled ? "Procesando..." : "Analizar Perfil"}
         </button>
       </div>
-      <div className="min-h-5 text-xs">
+      
+      <div className="min-h-5 flex items-center gap-2 font-mono text-[10px]">
         {hasError ? (
-          <p className="text-rose-300">Usa 1-30 caracteres: letras, numeros, punto o guion bajo.</p>
+          <span className="text-rose-400 flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+            ERROR: Usa 1-30 caracteres (letras, números, punto o guion bajo).
+          </span>
         ) : (
-          <p className="text-slate-400">{helperMessage || "Ingresa solo el username de Instagram (ejemplo: natgeo)."}</p>
+          <span className="text-slate-400 flex items-center gap-1.5">
+            <span className="h-1 w-1 bg-purple-500/50 rounded-full" />
+            {helperMessage || "Ingresa solo el username de Instagram."}
+          </span>
         )}
       </div>
     </form>

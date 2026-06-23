@@ -1,32 +1,49 @@
-# ProyectoARTE - Instagram Generative Analyzer
+# The Obligation to Shine
 
-Monolito con dos aplicaciones en el mismo repo:
+Obra digital interactiva que transforma la actividad de un perfil de Instagram en una constelacion generativa. El proyecto traduce publicaciones, fechas, interacciones, hashtags y menciones en un sistema celeste donde cada post aparece como un cuerpo luminoso dentro de una cartografia de presencia digital.
 
-- `backend/` -> FastAPI + Apify + Pillow
-- `frontend/` -> React + Vite
+## Idea
 
-## Estructura
+**The Obligation to Shine** explora la presion contemporanea de permanecer visibles. En las redes, cada publicacion funciona como una emision de luz: una busqueda de atencion, pertenencia y permanencia. La obra convierte esa logica en una constelacion donde el brillo no representa solo belleza, sino tambien exposicion, desgaste y la necesidad constante de seguir presentes.
+
+La pieza propone una lectura critica de la vida social digital: no solo publicamos para comunicar, sino para sostener una visibilidad dentro de un flujo continuo de aparicion y olvido.
+
+## Contexto academico
+
+Este proyecto fue desarrollado como trabajo academico de la **UTEC**, para el curso **Arte y Tecnologia**, ciclo **2026-1**.
+
+## Estructura del proyecto
+
+Monolito con dos aplicaciones en el mismo repositorio:
+
+- `backend/` -> FastAPI + Apify
+- `frontend/` -> React + Vite + p5.js
 
 ```text
 .
 ├─ backend/
 │  ├─ main.py
 │  ├─ requirements.txt
+│  ├─ core/
 │  ├─ models/
 │  ├─ routes/
-│  ├─ services/
-│  ├─ utils/
-│  └─ websocket/
-└─ frontend/
-   ├─ package.json
-   ├─ index.html
-   ├─ vite.config.js
-   └─ src/
-      ├─ App.jsx
-      └─ components/
+│  └─ services/
+├─ frontend/
+│  ├─ package.json
+│  ├─ Dockerfile
+│  └─ src/
+└─ docker-compose.yml
 ```
 
-## Backend
+## Como funciona
+
+1. El usuario ingresa un username de Instagram.
+2. El frontend llama a `POST /analyze-profile`.
+3. El backend extrae datos del perfil usando Apify.
+4. La API devuelve un payload completo en una sola respuesta.
+5. El frontend transforma ese payload en una obra generativa renderizada en p5.js.
+
+## Backend local
 
 ```bash
 cd backend
@@ -34,14 +51,13 @@ python -m venv .venv
 # Windows PowerShell
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-# Configurar variables de entorno
 copy .env.example .env
 uvicorn main:app --reload
 ```
 
 Servidor en `http://localhost:8000`.
 
-### Endpoint REST
+### Endpoint principal
 
 - `POST /analyze-profile`
 
@@ -71,27 +87,12 @@ Response:
 }
 ```
 
-### WebSocket
+### Estado del extractor
 
-- El frontend ya no usa WebSocket. El flujo es one-shot por `POST /analyze-profile`.
+- `GET /auth-status`
+- `GET /extractor-status`
 
-Eventos ejemplo:
-
-```json
-{
-  "step": "batch_main_node",
-  "progress": 70,
-  "message": "Batch 2/5: dibujando nodo principal...",
-  "image": "base64_string"
-}
-```
-
-### Estado extractor
-
-- `GET /auth-status`: estado de configuracion del extractor Apify.
-- `GET /extractor-status`: estado completo (auth + cooldown global/perfil).
-
-## Frontend
+## Frontend local
 
 ```bash
 cd frontend
@@ -99,18 +100,11 @@ npm install
 npm run dev
 ```
 
-Aplicación en `http://localhost:5173`.
+Aplicacion en `http://localhost:5173`.
 
-## Flujo
+## Variables de entorno del backend
 
-1. Ingresas username (tambien acepta `@username` o URL de Instagram).
-2. Frontend llama `POST /analyze-profile`.
-3. Backend extrae posts con Apify y devuelve un payload completo (metadata, analisis y posts) en una sola respuesta.
-4. Frontend puede transformar ese payload en visualizaciones/arte con la libreria que prefieras.
-
-## Variables backend (.env)
-
-- Usa `backend/.env`:
+Configura `backend/.env`:
 
 ```bash
 APIFY_TOKEN=your_apify_token_here
@@ -119,7 +113,26 @@ APIFY_POSTS_LIMIT=12
 APIFY_TIMEOUT_SECONDS=180
 ```
 
-## Prueba rápida con curl
+## Deploy rapido con Docker Compose
+
+El proyecto incluye:
+
+- `backend/Dockerfile`
+- `frontend/Dockerfile`
+- `docker-compose.yml`
+
+Para levantarlo en una sola maquina:
+
+```bash
+docker compose up -d --build
+```
+
+Por defecto:
+
+- frontend en `http://localhost:8080`
+- backend en `http://localhost:8000`
+
+## Prueba rapida con curl
 
 ```bash
 curl -X POST http://localhost:8000/analyze-profile \

@@ -22,9 +22,20 @@ export const buildSceneConfig = (
   if (!bestPostByLikes && posts.length > 0) bestPostByLikes = posts.reduce((prev, curr) => (getLikes(curr) > getLikes(prev) ? curr : prev), posts[0]);
   if (!bestPostByComments && posts.length > 0) bestPostByComments = posts.reduce((prev, curr) => (getComments(curr) > getComments(prev) ? curr : prev), posts[0]);
 
-  const timestamps = posts.map((post) => parseDate(post.timestamp));
-  const newest = Math.max(0, ...timestamps);
-  const oldest = Math.min(newest, ...timestamps.filter((t) => t > 0));
+  const fallbackEnd = Date.now();
+  const fallbackStart = fallbackEnd - Math.max(1, posts.length - 1) * 86400000 * 3;
+  const resolvedTimestamps = posts.map((post, idx) => {
+    const parsed = parseDate(post.timestamp);
+    if (parsed > 0) return parsed;
+    const ratio = posts.length <= 1 ? 0 : idx / (posts.length - 1);
+    return fallbackStart + (fallbackEnd - fallbackStart) * ratio;
+  });
+  const newest = Math.max(...resolvedTimestamps);
+  const oldest = Math.min(...resolvedTimestamps);
+  const rawRange = Math.max(1, newest - oldest);
+  const timelinePadding = Math.max(rawRange * 0.08, 1000 * 60 * 60 * 24 * 7);
+  const timelineStartMs = oldest - timelinePadding;
+  const timelineEndMs = newest;
 
   const mainTag = payload.analysis?.top_hashtags?.[0]?.value || "";
   const palette = getProfilePalette(mainTag, payload.username);
@@ -90,8 +101,8 @@ export const buildSceneConfig = (
     const comments = getComments(post);
     const likeRatio = likes / maxLikes;
     const commentRatio = comments / maxComments;
-    const t = parseDate(post.timestamp);
-    const recencyRatio = newest > oldest && t > 0 ? (newest - t) / (newest - oldest) : prng.next();
+    const t = resolvedTimestamps[idx];
+    const recencyRatio = newest > oldest ? (newest - t) / (newest - oldest) : prng.next();
     const baseDistance = p.map(recencyRatio, 0, 1, 95, Math.min(cw, ch) * 0.4);
     const angle = idx * 2.39996 + prng.range(-0.06, 0.06);
     const starX = cw / 2 + Math.cos(angle) * baseDistance;
@@ -115,6 +126,8 @@ export const buildSceneConfig = (
       glow: p.map(commentRatio, 0, 1, 15, 42),
       color: nodeColor,
       post,
+      timestampMs: t,
+      timeRatio: timelineEndMs > timelineStartMs ? (t - timelineStartMs) / (timelineEndMs - timelineStartMs) : 1,
       likes,
       comments,
       isBestLikes: post.id === bestPostByLikes?.id || likes === maxLikes,
@@ -187,5 +200,17 @@ export const buildSceneConfig = (
   for (let k = 0; k < payload.username.length; k += 1) nameHash = (nameHash * 31 + payload.username.charCodeAt(k)) >>> 0;
   const catalogNumber = `DEC-${1000 + (nameHash % 9000)}-${new Date(payload.generated_at || Date.now()).getFullYear()}`;
 
-  return { bgStars, cloudBlobs, stars, connections, technicalGrid, compassTicks, catalogNumber };
+  return {
+    bgStars,
+    cloudBlobs,
+    stars,
+    connections,
+    technicalGrid,
+    compassTicks,
+    catalogNumber,
+    oldestPostMs: oldest,
+    newestPostMs: newest,
+    timelineStartMs,
+    timelineEndMs,
+  };
 };
