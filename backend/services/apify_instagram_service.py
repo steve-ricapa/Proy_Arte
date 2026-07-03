@@ -93,7 +93,7 @@ async def fetch_instagram_posts(username_or_url: str, limit: int | None = None) 
     profile_url = build_instagram_profile_url(username_or_url)
 
     safe_limit = config.APIFY_POSTS_LIMIT if limit is None else limit
-    safe_limit = max(1, min(50, safe_limit))
+    safe_limit = max(1, min(100, safe_limit))
 
     payload = {
         "directUrls": [profile_url],

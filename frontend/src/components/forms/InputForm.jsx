@@ -12,6 +12,7 @@ function normalizeInstagramInput(value) {
 
 function InputForm({ onSubmit, disabled, helperMessage }) {
   const [username, setUsername] = useState("");
+  const [limit, setLimit] = useState(50);
   const [touched, setTouched] = useState(false);
 
   const normalizedUsername = normalizeInstagramInput(username);
@@ -24,7 +25,7 @@ function InputForm({ onSubmit, disabled, helperMessage }) {
     if (!normalizedUsername || !isValid || disabled) {
       return;
     }
-    onSubmit(normalizedUsername);
+    onSubmit(normalizedUsername, Math.max(1, Math.min(100, Number(limit) || 50)));
   };
 
   return (
@@ -57,6 +58,21 @@ function InputForm({ onSubmit, disabled, helperMessage }) {
             @
           </span>
         </div>
+        <div className="sm:w-[150px]">
+          <label htmlFor="posts-limit" className="mb-2 block font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
+            Posts
+          </label>
+          <input
+            id="posts-limit"
+            type="number"
+            min="1"
+            max="100"
+            value={limit}
+            onChange={(event) => setLimit(event.target.value)}
+            disabled={disabled}
+            className="w-full rounded-xl border border-purple-500/20 bg-black/45 px-4 py-4 text-sm text-slate-100 outline-none transition-all duration-300 focus:border-purple-500 focus:bg-slate-950/80 focus:shadow-[0_0_20px_rgba(168,85,247,0.25)] font-mono"
+          />
+        </div>
         <button
           type="submit"
           disabled={disabled}
@@ -75,7 +91,7 @@ function InputForm({ onSubmit, disabled, helperMessage }) {
         ) : (
           <span className="text-slate-400 flex items-center gap-1.5">
             <span className="h-1 w-1 bg-purple-500/50 rounded-full" />
-            {helperMessage || "Ingresa solo el username de Instagram."}
+            {helperMessage || "Ingresa solo el username de Instagram."} Puedes pedir entre 1 y 100 posts.
           </span>
         )}
       </div>

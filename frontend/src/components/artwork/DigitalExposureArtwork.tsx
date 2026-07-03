@@ -6,13 +6,17 @@ import TimelineControls from "./timeline/TimelineControls";
 import { useArtworkExport } from "./hooks/useArtworkExport";
 import { buildSceneConfig } from "./scene/buildSceneConfig";
 import { drawScene } from "./render/drawScene";
-import { getStarPositionAtTime, isNodeVisibleAtTime } from "./timeline/temporal";
+import { getNodeTimelineState, getStarPositionAtTime, isNodeVisibleAtTime } from "./timeline/temporal";
 import { InstagramAnalysisPayload, SceneConfig, StarNode } from "./types/artwork.types";
 
 type DigitalExposureArtworkProps = {
   data: InstagramAnalysisPayload;
   width?: number;
   height?: number;
+  onPlanetBorn?: () => void;
+  onPlanetExploded?: () => void;
+  isMuted?: boolean;
+  onToggleMute?: () => void;
 };
 
 type SketchProps = {
@@ -25,6 +29,8 @@ type SketchProps = {
   currentTimestamp: number;
   isFullscreen: boolean;
   isScrubbing: boolean;
+  onPlanetBorn?: () => void;
+  onPlanetExploded?: () => void;
 };
 
 type TimelineMeta = {
@@ -71,6 +77,11 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
   let phaseTick = 0;
   let hoveredNode: StarNode | null = null;
   let introAnnounced = false;
+  let onPlanetBorn: (() => void) | undefined;
+  let onPlanetExploded: (() => void) | undefined;
+  let bornSoundPlayedIds = new Set<string>();
+  let explodedSoundPlayedIds = new Set<string>();
+  let lastTimelineTimestamp = 0;
   let zoom = 1;
   let panX = 0;
   let panY = 0;
@@ -130,6 +141,8 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
     onHover = props.onHover || null;
     onIntroReady = props.onIntroReady || null;
     onSceneReady = props.onSceneReady || null;
+    onPlanetBorn = props.onPlanetBorn;
+    onPlanetExploded = props.onPlanetExploded;
     currentTimestamp = props.currentTimestamp;
     isFullscreen = props.isFullscreen;
     isScrubbing = props.isScrubbing;
@@ -153,6 +166,9 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
       phaseTick = 0;
       hoveredNode = null;
       introAnnounced = false;
+      bornSoundPlayedIds = new Set<string>();
+      explodedSoundPlayedIds = new Set<string>();
+      lastTimelineTimestamp = 0;
       if (onHover) onHover(null);
       p.loop();
       return;
@@ -184,6 +200,24 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
       }
       return;
     }
+
+    if (currentTimestamp < lastTimelineTimestamp) {
+      bornSoundPlayedIds.clear();
+      explodedSoundPlayedIds.clear();
+    }
+
+    sceneConfig.stars.forEach((star) => {
+      const timeline = getNodeTimelineState(star, sceneConfig, currentTimestamp);
+      if (timeline.isVisible && timeline.appearance > 0 && !bornSoundPlayedIds.has(star.id)) {
+        bornSoundPlayedIds.add(star.id);
+        onPlanetBorn?.();
+      }
+      if (timeline.isDead && !explodedSoundPlayedIds.has(star.id)) {
+        explodedSoundPlayedIds.add(star.id);
+        onPlanetExploded?.();
+      }
+    });
+    lastTimelineTimestamp = currentTimestamp;
 
     drawScene(p, sceneConfig, phase, phaseTick, cw, ch, currentTimestamp, { zoom, panX, panY });
 
@@ -263,13 +297,22 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
   };
 };
 
-export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, height = FALLBACK_HEIGHT }: DigitalExposureArtworkProps) {
+export default function DigitalExposureArtwork({
+  data,
+  width = FALLBACK_WIDTH,
+  height = FALLBACK_HEIGHT,
+  onPlanetBorn,
+  onPlanetExploded,
+  isMuted = false,
+  onToggleMute,
+}: DigitalExposureArtworkProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasFrameRef = useRef<HTMLDivElement>(null);
   const payload = useMemo(() => data, [data]);
   const handleExport = useArtworkExport(canvasFrameRef, data.username || "profile");
   const [hoveredStar, setHoveredStar] = useState<StarNode | null>(null);
   const [timelineProgress, setTimelineProgress] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isTimelineReady, setIsTimelineReady] = useState(false);
   const [timelineMeta, setTimelineMeta] = useState<TimelineMeta | null>(null);
@@ -286,6 +329,7 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
   useEffect(() => {
     setHoveredStar(null);
     setTimelineProgress(0);
+    setPlaybackSpeed(1);
     setIsPlaying(false);
     setIsTimelineReady(false);
     setTimelineMeta(null);
@@ -353,7 +397,7 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
       const delta = now - last;
       last = now;
       setTimelineProgress((prev) => {
-        const next = Math.min(1, prev + delta / TIMELINE_DURATION_MS);
+        const next = Math.min(1, prev + (delta * playbackSpeed) / TIMELINE_DURATION_MS);
         if (next >= 1) {
           setIsPlaying(false);
         }
@@ -364,7 +408,7 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [isPlaying, isTimelineReady, isScrubbing]);
+  }, [isPlaying, isTimelineReady, isScrubbing, playbackSpeed]);
 
   useEffect(() => {
     if (hoveredStar) {
@@ -401,6 +445,10 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
 
   const handleTimelineChange = useCallback((value: number) => {
     setTimelineProgress(value);
+  }, []);
+
+  const handleSpeedChange = useCallback((value: number) => {
+    setPlaybackSpeed(value);
   }, []);
 
   const handleScrubStart = useCallback(() => {
@@ -460,6 +508,23 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
+            onClick={onToggleMute}
+            className="relative overflow-hidden rounded-lg border border-purple-500/30 bg-black/35 px-4 py-2 text-xs font-semibold text-purple-200 shadow-lg shadow-purple-950/20 backdrop-blur transition-all duration-300 hover:border-purple-500/50 hover:bg-purple-900/30 hover:text-white hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <span className="flex items-center justify-center gap-1.5 font-mono">
+              <svg className="h-3.5 w-3.5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                {isMuted ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 9l4 4m0 0l-4 4m4-4H9m4-8L5 9H3v6h2l8 4V5z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5L6 9H3v6h3l5 4V5zm5.54 3.46a5 5 0 010 7.08m2.83-9.91a9 9 0 010 12.74" />
+                )}
+              </svg>
+              {isMuted ? "SONIDO OFF" : "SONIDO ON"}
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleFullscreen}
             className="relative overflow-hidden rounded-lg border border-purple-500/30 bg-purple-950/40 px-4 py-2 text-xs font-semibold text-purple-200 shadow-lg shadow-purple-950/20 backdrop-blur transition-all duration-300 hover:border-purple-500/50 hover:bg-purple-900/40 hover:text-white hover:scale-[1.02] active:scale-[0.98]"
           >
@@ -505,6 +570,8 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
               currentTimestamp={currentTimestamp}
               isFullscreen={isFullscreen}
               isScrubbing={isScrubbing}
+              onPlanetBorn={onPlanetBorn}
+              onPlanetExploded={onPlanetExploded}
             />
           </div>
 
@@ -513,6 +580,8 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
               <TimelineControls
                 progress={timelineProgress}
                 onProgressChange={handleTimelineChange}
+                speed={playbackSpeed}
+                onSpeedChange={handleSpeedChange}
                 onScrubStart={handleScrubStart}
                 onScrubEnd={handleScrubEnd}
                 isPlaying={isPlaying}
@@ -532,6 +601,8 @@ export default function DigitalExposureArtwork({ data, width = FALLBACK_WIDTH, h
             <TimelineControls
               progress={timelineProgress}
               onProgressChange={handleTimelineChange}
+              speed={playbackSpeed}
+              onSpeedChange={handleSpeedChange}
               onScrubStart={handleScrubStart}
               onScrubEnd={handleScrubEnd}
               isPlaying={isPlaying}

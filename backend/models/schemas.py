@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class AnalyzeProfileRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=120)
-    limit: int = Field(default=12, ge=1, le=50)
+    limit: int = Field(default=50, ge=1, le=100)
 
     @property
     def posts_limit(self) -> int:

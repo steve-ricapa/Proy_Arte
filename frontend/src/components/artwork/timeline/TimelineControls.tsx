@@ -1,6 +1,8 @@
 type TimelineControlsProps = {
   progress: number;
   onProgressChange: (value: number) => void;
+  speed: number;
+  onSpeedChange: (value: number) => void;
   isPlaying: boolean;
   onTogglePlay: () => void;
   onReset: () => void;
@@ -16,6 +18,8 @@ type TimelineControlsProps = {
 export default function TimelineControls({
   progress,
   onProgressChange,
+  speed,
+  onSpeedChange,
   isPlaying,
   onTogglePlay,
   onReset,
@@ -79,6 +83,26 @@ export default function TimelineControls({
           <span>{startLabel}</span>
           <span>{endLabel}</span>
         </div>
+      </div>
+
+      <div className="mt-4 border-t border-white/8 pt-4">
+        <div className="mb-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.18em] text-slate-400">
+          <span>Speed</span>
+          <span>{speed.toFixed(2)}x</span>
+        </div>
+        <input
+          type="range"
+          min="0.25"
+          max="2"
+          step="0.05"
+          value={speed}
+          disabled={disabled}
+          onChange={(event) => onSpeedChange(Number(event.target.value))}
+          onPointerDown={onScrubStart}
+          onPointerUp={onScrubEnd}
+          onPointerCancel={onScrubEnd}
+          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-40"
+        />
       </div>
     </div>
   );

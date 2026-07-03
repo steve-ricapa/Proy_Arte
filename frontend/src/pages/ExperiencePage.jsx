@@ -3,11 +3,13 @@ import axios from "axios";
 
 import DigitalExposureArtwork from "../components/artwork/DigitalExposureArtwork";
 import InputForm from "../components/forms/InputForm";
-import samplePayload from "../samplePayload";
+import useArtworkAudio from "../components/artwork/audio/useArtworkAudio";
+import { createSamplePayload } from "../samplePayload";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 export default function ExperiencePage({ onBack }) {
+  const { armAudio, playBirthSound, playExplosionSound, isMuted, toggleMute } = useArtworkAudio();
   const [status, setStatus] = useState("listo");
   const [message, setMessage] = useState("Ingresa un username para crear una obra generativa.");
   const [payload, setPayload] = useState(null);
@@ -26,13 +28,14 @@ export default function ExperiencePage({ onBack }) {
     refreshExtractorStatus();
   }, []);
 
-  const handleAnalyze = async (username) => {
+  const handleAnalyze = async (username, limit) => {
+    armAudio();
     setStatus("cargando");
     setMessage("Recolectando huellas digitales del perfil...");
     setPayload(null);
 
     try {
-      const response = await axios.post(`${API_BASE}/analyze-profile`, { username, limit: 50 });
+      const response = await axios.post(`${API_BASE}/analyze-profile`, { username, limit });
       setPayload(response.data);
       setStatus("terminado");
       setMessage("Payload completo recibido. La constelacion ya puede dibujarse.");
@@ -48,6 +51,11 @@ export default function ExperiencePage({ onBack }) {
   const helperMessage = extractorReady
     ? "Ingresa solo el username de Instagram (ejemplo: natgeo)."
     : "Extractor no configurado. Revisa APIFY_TOKEN en backend/.env.";
+
+  const handleToggleMute = () => {
+    armAudio();
+    toggleMute();
+  };
 
   return (
     <div
@@ -110,7 +118,8 @@ export default function ExperiencePage({ onBack }) {
           <button
             type="button"
             onClick={() => {
-              setPayload(samplePayload);
+              armAudio();
+              setPayload(createSamplePayload());
               setStatus("terminado");
               setMessage("Payload de prueba cargado localmente.");
             }}
@@ -131,7 +140,13 @@ export default function ExperiencePage({ onBack }) {
 
         {payload && (
           <div className="mt-8">
-            <DigitalExposureArtwork data={payload} />
+            <DigitalExposureArtwork
+              data={payload}
+              onPlanetBorn={playBirthSound}
+              onPlanetExploded={playExplosionSound}
+              isMuted={isMuted}
+              onToggleMute={handleToggleMute}
+            />
           </div>
         )}
       </main>
