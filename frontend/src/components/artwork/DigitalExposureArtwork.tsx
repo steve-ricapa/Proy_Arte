@@ -436,7 +436,7 @@ export default function DigitalExposureArtwork({
 
       if (stageEl && document.fullscreenElement === stageEl) {
         const stageWidth = Math.max(isMobileViewport ? 280 : 480, stageEl.clientWidth - (isMobileViewport ? 18 : 48));
-        const stageHeight = Math.max(isMobileViewport ? 240 : 320, stageEl.clientHeight - (isMobileViewport ? 180 : 140));
+        const stageHeight = Math.max(isMobileViewport ? 240 : 320, stageEl.clientHeight - (isMobileViewport ? 24 : 48));
         if (stageWidth / stageHeight > ASPECT_RATIO) {
           nextHeight = stageHeight;
           nextWidth = Math.round(nextHeight * ASPECT_RATIO);
@@ -714,35 +714,35 @@ export default function DigitalExposureArtwork({
       <div className="mt-6 border-t border-white/10 pt-6">
         <p className="text-xs uppercase font-semibold tracking-[0.16em] text-purple-300 mb-4 font-mono flex items-center gap-2">
           <span className="inline-block h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
-          SISTEMA DE EQUIVALENCIAS Y CARTOGRAFIA CELESTE
+          CARTOGRAFIA Y CICLO VITAL DE LA CONSTELACION
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-mono text-[11px] text-slate-300">
           <div className="bg-slate-900/40 p-4 rounded-xl border border-white/5 space-y-3 shadow-inner">
-            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">CUERPOS CELESTES (POSTS)</p>
+            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">NACIMIENTO, DERIVA Y EXTINCION</p>
             <div className="space-y-2">
-              <div className="flex items-start gap-2.5"><span className="relative flex-shrink-0 w-3 h-3 rounded-full bg-purple-600 border border-purple-400 mt-0.5 overflow-hidden"><span className="absolute inset-x-0 top-1.5 h-0.5 bg-purple-200 opacity-60" /></span><div><strong className="text-white block font-medium">Gigante Gaseoso</strong><span className="text-slate-400 text-[10px]">Posts de alcance rapido y traccion impulsiva.</span></div></div>
-              <div className="flex items-start gap-2.5"><span className="relative flex-shrink-0 w-3 h-3 rounded-full bg-blue-500 mt-0.5"><span className="absolute -inset-1 border border-blue-300/40 rounded-full scale-[1.3] rotate-12" /></span><div><strong className="text-white block font-medium">Planeta Anillado</strong><span className="text-slate-400 text-[10px]">Posts con menciones activas y resonancia social.</span></div></div>
-              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-indigo-600 border border-indigo-400 mt-0.5 relative"><span className="absolute top-0.5 left-0.5 w-1 h-1 bg-black/40 rounded-full" /><span className="absolute bottom-0.5 right-0.5 w-0.5 h-0.5 bg-black/40 rounded-full" /></span><div><strong className="text-white block font-medium">Cuerpo Rocoso</strong><span className="text-slate-400 text-[10px]">Posts directos, organicos y de materia visual mas densa.</span></div></div>
+              <div className="flex items-start gap-2.5"><span className="relative flex-shrink-0 w-3 h-3 rounded-full bg-purple-600 border border-purple-400 mt-0.5 overflow-hidden"><span className="absolute inset-x-0 top-1.5 h-0.5 bg-purple-200 opacity-60" /></span><div><strong className="text-white block font-medium">Nacimiento</strong><span className="text-slate-400 text-[10px]">Cuando la timeline alcanza la fecha de un post, su planeta aparece con un destello inicial.</span></div></div>
+              <div className="flex items-start gap-2.5"><span className="relative flex-shrink-0 w-3 h-3 rounded-full bg-blue-500 mt-0.5"><span className="absolute -inset-1 border border-blue-300/40 rounded-full scale-[1.3] rotate-12" /></span><div><strong className="text-white block font-medium">Deriva orbital</strong><span className="text-slate-400 text-[10px]">Cada planeta se desplaza del centro hacia el exterior a medida que envejece dentro de su ciclo vital.</span></div></div>
+              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-indigo-600 border border-indigo-400 mt-0.5 relative"><span className="absolute top-0.5 left-0.5 w-1 h-1 bg-black/40 rounded-full" /><span className="absolute bottom-0.5 right-0.5 w-0.5 h-0.5 bg-black/40 rounded-full" /></span><div><strong className="text-white block font-medium">Extincion</strong><span className="text-slate-400 text-[10px]">Cada planeta vive una parte limitada de la timeline y al agotarse explota: simboliza como una publicacion es desplazada por contenido nuevo.</span></div></div>
             </div>
           </div>
 
           <div className="bg-slate-900/40 p-4 rounded-xl border border-white/5 space-y-3 shadow-inner">
-            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">CODICES CROMATICOS (HASHTAGS)</p>
+            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">POSICION Y METRICAS</p>
             <div className="space-y-2">
-              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.5)] mt-0.5" /><div><strong className="text-[#c7d2fe] block font-medium">Cobalto Profundo</strong><span className="text-slate-400 text-[10px]">Temas de tecnologia, profesion, ciencia o trayectorias de largo alcance.</span></div></div>
-              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_6px_rgba(168,85,247,0.5)] mt-0.5" /><div><strong className="text-[#e9d5ff] block font-medium">Violeta Estelar</strong><span className="text-slate-400 text-[10px]">Marca personal, arte digital y atmosferas de alta exposicion.</span></div></div>
-              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-fuchsia-500 shadow-[0_0_6px_rgba(217,70,239,0.5)] mt-0.5" /><div><strong className="text-[#f5d0fe] block font-medium">Bronce Rosado</strong><span className="text-slate-400 text-[10px]">Reflexiones personales, cercania afectiva y estetica relacional.</span></div></div>
+              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.5)] mt-0.5" /><div><strong className="text-[#c7d2fe] block font-medium">Posicion temporal</strong><span className="text-slate-400 text-[10px]">No es aleatoria: los posts mas recientes nacen cerca del centro y los mas antiguos quedan hacia la periferia.</span></div></div>
+              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_6px_rgba(168,85,247,0.5)] mt-0.5" /><div><strong className="text-[#e9d5ff] block font-medium">Masa y aura</strong><span className="text-slate-400 text-[10px]">El tamano del planeta escala con likes y el resplandor exterior refleja el volumen de comentarios.</span></div></div>
+              <div className="flex items-start gap-2.5"><span className="flex-shrink-0 w-3 h-3 rounded-full bg-fuchsia-500 shadow-[0_0_6px_rgba(217,70,239,0.5)] mt-0.5" /><div><strong className="text-[#f5d0fe] block font-medium">Deriva acumulada</strong><span className="text-slate-400 text-[10px]">A medida que avanza la secuencia, los cuerpos se alejan mas del centro y los posts con mayor impacto pueden recorrer una distancia mayor.</span></div></div>
             </div>
           </div>
 
           <div className="bg-slate-900/40 p-4 rounded-xl border border-white/5 space-y-3 shadow-inner">
-            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">CARTOGRAFIA DE METRICAS</p>
+            <p className="text-purple-200 font-bold uppercase tracking-[0.08em] border-b border-white/5 pb-1">SATELITES, COLOR Y FORMA</p>
             <div className="space-y-2">
-              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">M</span><div><strong className="text-white block font-medium">Masa Planetaria</strong><span className="text-slate-400 text-[10px]">El radio del planeta representa la fuerza gravitacional del post en likes.</span></div></div>
-              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">A</span><div><strong className="text-white block font-medium">Aura y Halos</strong><span className="text-slate-400 text-[10px]">La intensidad exterior traduce el volumen de comentarios.</span></div></div>
-              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">S</span><div><strong className="text-white block font-medium">Satelites</strong><span className="text-slate-400 text-[10px]">Las menciones orbitan como pequenos cuerpos asociados a cada publicacion.</span></div></div>
-              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">T</span><div><strong className="text-white block font-medium">Tiempo</strong><span className="text-slate-400 text-[10px]">La timeline activa o apaga gradualmente la presencia de cada planeta segun su fecha.</span></div></div>
+              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">S</span><div><strong className="text-white block font-medium">Satelites</strong><span className="text-slate-400 text-[10px]">Las menciones orbitan como pequenos cuerpos secundarios alrededor de la publicacion que las contiene.</span></div></div>
+              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">A</span><div><strong className="text-white block font-medium">Anillos</strong><span className="text-slate-400 text-[10px]">Los anillos aparecen segun la actividad conversacional del post y expanden su presencia visual.</span></div></div>
+              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">C</span><div><strong className="text-white block font-medium">Color</strong><span className="text-slate-400 text-[10px]">Los tonos del sistema nacen de hashtags y temas del perfil, conectando contenido y atmosfera cromatica.</span></div></div>
+              <div className="flex items-start gap-2"><span className="text-[12px] mt-0.5">F</span><div><strong className="text-white block font-medium">Forma</strong><span className="text-slate-400 text-[10px]">Cada planeta puede verse gaseoso, anillado o rocoso como una variacion estetica de la constelacion, no como una metrica independiente.</span></div></div>
             </div>
           </div>
         </div>

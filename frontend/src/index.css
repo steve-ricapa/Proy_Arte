@@ -251,10 +251,17 @@ canvas {
 
 .fullscreen-stage__controls {
   position: absolute;
-  left: 24px;
-  right: 24px;
-  bottom: 20px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 20;
+  padding: 40px 24px 20px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0.5) 48%, transparent);
+  pointer-events: none;
+}
+
+.fullscreen-stage__controls > * {
+  pointer-events: auto;
 }
 
 @media (max-width: 767px) {
@@ -273,8 +280,6 @@ canvas {
   }
 
   .fullscreen-stage__controls {
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
+    padding: 24px 12px 12px;
   }
 }
