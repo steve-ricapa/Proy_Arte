@@ -24,7 +24,15 @@ def _to_bool(value: str | None, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-APIFY_TOKEN: str | None = os.getenv("APIFY_TOKEN")
+APIFY_KEYS: list[str] = [
+    key
+    for key in [
+        os.getenv("APIFY_KEY1", "").strip(),
+        os.getenv("APIFY_KEY2", "").strip(),
+        os.getenv("APIFY_KEY3", "").strip(),
+    ]
+    if key
+]
 APIFY_ACTOR_ID: str = os.getenv("APIFY_ACTOR_ID", "apify~instagram-scraper")
 APIFY_POSTS_LIMIT: int = _to_int(os.getenv("APIFY_POSTS_LIMIT"), 12)
 APIFY_TIMEOUT_SECONDS: int = _to_int(os.getenv("APIFY_TIMEOUT_SECONDS"), 180)

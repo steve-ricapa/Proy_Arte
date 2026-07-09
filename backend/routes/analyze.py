@@ -25,9 +25,9 @@ def get_analyze_router(pipeline_service: PipelineService) -> APIRouter:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         auth = pipeline_service.get_auth_status()
-        if auth.get("status") == "failed" and "APIFY_TOKEN" in auth.get("note", ""):
+        if auth.get("status") == "failed" and "APIFY_KEY" in auth.get("note", ""):
             logger.error("analyze.request.missing_token username=%s", username)
-            raise HTTPException(status_code=500, detail="APIFY_TOKEN no esta configurado en el backend.")
+            raise HTTPException(status_code=500, detail="No hay APIFY_KEY configuradas en el backend.")
 
         try:
             result = await pipeline_service.analyze_profile(username=username, posts_limit=payload.posts_limit)
@@ -51,9 +51,9 @@ def get_analyze_router(pipeline_service: PipelineService) -> APIRouter:
                 exc,
             )
             if exc.error_type == "missing_token":
-                raise HTTPException(status_code=500, detail="APIFY_TOKEN no esta configurado en el backend.") from exc
+                raise HTTPException(status_code=500, detail="No hay APIFY_KEY configuradas en el backend.") from exc
             if exc.error_type == "auth":
-                raise HTTPException(status_code=502, detail="Apify token invalido o sin permisos.") from exc
+                raise HTTPException(status_code=502, detail="Todas las APIFY_KEY fueron rechazadas, no tienen permisos o se quedaron sin creditos.") from exc
             if exc.error_type == "timeout":
                 raise HTTPException(status_code=504, detail="La extraccion tardo demasiado. Intenta con menos posts.") from exc
             raise HTTPException(status_code=502, detail="Error consultando Apify.") from exc

@@ -15,6 +15,9 @@ from core import config
 logger = logging.getLogger(__name__)
 
 
+_key_index = 0
+
+
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
 
 
@@ -53,16 +56,13 @@ def build_instagram_profile_url(username_or_url: str) -> str:
 
 
 async def run_apify_instagram_scraper(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    token = (config.APIFY_TOKEN or "").strip()
-    if not token:
-        raise ApifyServiceError("APIFY_TOKEN no esta configurado en el backend.", status_code=500, error_type="missing_token")
+    global _key_index
+
+    keys = config.APIFY_KEYS
+    if not keys:
+        raise ApifyServiceError("No hay APIFY_KEY configuradas en el backend.", status_code=500, error_type="missing_token")
 
     url = f"https://api.apify.com/v2/acts/{config.APIFY_ACTOR_ID}/run-sync-get-dataset-items"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
 
     started = perf_counter()
     logger.info(
@@ -73,50 +73,93 @@ async def run_apify_instagram_scraper(payload: dict[str, Any]) -> list[dict[str,
         payload.get("directUrls"),
     )
 
+    auth_failure: ApifyServiceError | None = None
+    start_index = _key_index % len(keys)
+
     try:
         async with httpx.AsyncClient(timeout=config.APIFY_TIMEOUT_SECONDS) as client:
-            response = await client.post(url, json=payload, headers=headers)
-    except httpx.TimeoutException as exc:
-        logger.error(
-            "apify.request.timeout results_limit=%s duration_ms=%s",
-            payload.get("resultsLimit"),
-            round((perf_counter() - started) * 1000),
-        )
-        raise ApifyServiceError(
-            "La extraccion tardo demasiado. Intenta con menos posts.",
-            status_code=504,
-            error_type="timeout",
-        ) from exc
-    except httpx.HTTPError as exc:
-        logger.exception("apify.request.network_error results_limit=%s", payload.get("resultsLimit"))
-        raise ApifyServiceError("Error consultando Apify.", status_code=502, error_type="network") from exc
+            for offset in range(len(keys)):
+                key_idx = (start_index + offset) % len(keys)
+                key = keys[key_idx]
+                headers = {
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                }
 
-    if response.status_code in {401, 403}:
-        logger.error("apify.request.auth_error status=%s", response.status_code)
-        raise ApifyServiceError("Apify token invalido o sin permisos.", status_code=502, error_type="auth")
+                logger.info("apify.request.key_attempt key_index=%s", key_idx + 1)
+                try:
+                    response = await client.post(url, json=payload, headers=headers)
+                except httpx.TimeoutException as exc:
+                    logger.error(
+                        "apify.request.timeout key_index=%s results_limit=%s duration_ms=%s",
+                        key_idx + 1,
+                        payload.get("resultsLimit"),
+                        round((perf_counter() - started) * 1000),
+                    )
+                    raise ApifyServiceError(
+                        "La extraccion tardo demasiado. Intenta con menos posts.",
+                        status_code=504,
+                        error_type="timeout",
+                    ) from exc
+                except httpx.HTTPError as exc:
+                    logger.exception(
+                        "apify.request.network_error key_index=%s results_limit=%s",
+                        key_idx + 1,
+                        payload.get("resultsLimit"),
+                    )
+                    raise ApifyServiceError("Error consultando Apify.", status_code=502, error_type="network") from exc
 
-    if response.status_code not in {200, 201}:
-        safe_text = response.text[:500]
-        logger.error("apify.request.upstream_error status=%s detail=%s", response.status_code, safe_text)
+                if response.status_code in {401, 402, 403}:
+                    safe_text = response.text[:500]
+                    logger.warning(
+                        "apify.request.key_rejected key_index=%s status=%s detail=%s",
+                        key_idx + 1,
+                        response.status_code,
+                        safe_text,
+                    )
+                    auth_failure = ApifyServiceError(
+                        "Apify token invalido, sin permisos o sin creditos.",
+                        status_code=502,
+                        error_type="auth",
+                    )
+                    continue
+
+                if response.status_code not in {200, 201}:
+                    safe_text = response.text[:500]
+                    logger.error("apify.request.upstream_error status=%s detail=%s", response.status_code, safe_text)
+                    raise ApifyServiceError(
+                        f"Error consultando Apify. status={response.status_code} detail={safe_text}",
+                        status_code=502,
+                        error_type="upstream",
+                    )
+
+                data = response.json()
+                if not isinstance(data, list):
+                    logger.error("apify.request.invalid_output type=%s", type(data).__name__)
+                    raise ApifyServiceError("Respuesta invalida de Apify (no es lista).", status_code=502, error_type="invalid_output")
+
+                _key_index = key_idx
+                logger.info(
+                    "apify.request.success status=%s items=%s duration_ms=%s key_index=%s",
+                    response.status_code,
+                    len(data),
+                    round((perf_counter() - started) * 1000),
+                    key_idx + 1,
+                )
+                return data
+    finally:
+        if keys:
+            _key_index %= len(keys)
+
+    if auth_failure is not None:
         raise ApifyServiceError(
-            f"Error consultando Apify. status={response.status_code} detail={safe_text}",
+            "Todas las APIFY_KEY configuradas fueron rechazadas o se quedaron sin creditos.",
             status_code=502,
-            error_type="upstream",
+            error_type="auth",
         )
 
-    data = response.json()
-    if not isinstance(data, list):
-        logger.error("apify.request.invalid_output type=%s", type(data).__name__)
-        raise ApifyServiceError("Respuesta invalida de Apify (no es lista).", status_code=502, error_type="invalid_output")
-
-    logger.info(
-        "apify.request.success status=%s items=%s duration_ms=%s",
-        response.status_code,
-        len(data),
-        round((perf_counter() - started) * 1000),
-    )
-
-    return data
+    raise ApifyServiceError("Error consultando Apify.", status_code=502, error_type="upstream")
 
 
 async def fetch_instagram_posts(username_or_url: str, limit: int | None = None) -> list[dict[str, Any]]:

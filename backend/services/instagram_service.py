@@ -13,13 +13,13 @@ from services.apify_instagram_service import (
 
 class InstagramService:
     def __init__(self) -> None:
-        token = (config.APIFY_TOKEN or "").strip()
-        if token:
+        keys_count = len(config.APIFY_KEYS)
+        if keys_count:
             self.auth_status = "configured"
-            self.auth_note = "Extractor Apify habilitado."
+            self.auth_note = f"Extractor Apify habilitado con {keys_count} key(s)."
         else:
             self.auth_status = "failed"
-            self.auth_note = "APIFY_TOKEN no esta configurado en el backend."
+            self.auth_note = "No hay APIFY_KEY configuradas en el backend."
 
     def get_auth_status(self) -> dict[str, str]:
         return {
