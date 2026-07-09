@@ -44,6 +44,7 @@ const ASPECT_RATIO = 16 / 9;
 const FALLBACK_WIDTH = 1280;
 const FALLBACK_HEIGHT = 720;
 const TIMELINE_DURATION_MS = 36000;
+const MOBILE_BREAKPOINT_PX = 768;
 
 const formatTimelineDate = (timestamp: number) => {
   if (!timestamp || Number.isNaN(timestamp)) return "No date";
@@ -90,6 +91,28 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
   let panStartMouseY = 0;
   let panOriginX = 0;
   let panOriginY = 0;
+  let pinchStartDistance = 0;
+  let pinchStartZoom = 1;
+
+  const getTouchDistance = () => {
+    if (p.touches.length < 2) return 0;
+    const [touchA, touchB] = p.touches as Array<{ x: number; y: number }>;
+    return p.dist(touchA.x, touchA.y, touchB.x, touchB.y);
+  };
+
+  const getVisibleStarAtPoint = (screenX: number, screenY: number) => {
+    if (phase < 5 || !sceneConfig) return null;
+    const point = screenToWorld(screenX, screenY);
+    for (const star of sceneConfig.stars) {
+      if (!isNodeVisibleAtTime(star, sceneConfig, currentTimestamp)) continue;
+      const position = getStarPositionAtTime(star, sceneConfig, currentTimestamp);
+      const d = p.dist(point.x, point.y, position.x, position.y);
+      if (d < star.radius + 18) {
+        return star;
+      }
+    }
+    return null;
+  };
 
   const screenToWorld = (screenX: number, screenY: number) => ({
     x: (screenX - panX) / zoom,
@@ -231,17 +254,7 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
   p.mouseMoved = () => {
     if (phase < 5 || !sceneConfig || isScrubbing) return;
     if (isPanning) return;
-    const point = screenToWorld(p.mouseX, p.mouseY);
-    let found: StarNode | null = null;
-    for (const star of sceneConfig.stars) {
-      if (!isNodeVisibleAtTime(star, sceneConfig, currentTimestamp)) continue;
-      const position = getStarPositionAtTime(star, sceneConfig, currentTimestamp);
-      const d = p.dist(point.x, point.y, position.x, position.y);
-      if (d < star.radius + 15) {
-        found = star;
-        break;
-      }
-    }
+    const found = getVisibleStarAtPoint(p.mouseX, p.mouseY);
 
     if (found !== hoveredNode) {
       hoveredNode = found;
@@ -273,6 +286,7 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
 
   p.mouseReleased = () => {
     isPanning = false;
+    pinchStartDistance = 0;
   };
 
   p.doubleClicked = () => {
@@ -293,6 +307,74 @@ const sketch: Sketch<SketchProps> = (p: P5CanvasInstance<SketchProps>) => {
     panY = p.mouseY - worldBefore.y * zoom;
     clampPan();
     p.loop();
+    return false;
+  };
+
+  p.touchStarted = () => {
+    if (phase < 5 || !sceneConfig || isScrubbing) return false;
+
+    if (p.touches.length >= 2) {
+      pinchStartDistance = getTouchDistance();
+      pinchStartZoom = zoom;
+      isPanning = false;
+      return false;
+    }
+
+    const touchedStar = getVisibleStarAtPoint(p.mouseX, p.mouseY);
+    if (touchedStar !== hoveredNode) {
+      hoveredNode = touchedStar;
+      onHover?.(hoveredNode);
+    }
+
+    if (!isFullscreen || touchedStar) {
+      p.loop();
+      return false;
+    }
+
+    isPanning = true;
+    panStartMouseX = p.mouseX;
+    panStartMouseY = p.mouseY;
+    panOriginX = panX;
+    panOriginY = panY;
+    return false;
+  };
+
+  p.touchMoved = () => {
+    if (!isFullscreen || phase < 5 || isScrubbing) return false;
+
+    if (p.touches.length >= 2) {
+      const distance = getTouchDistance();
+      if (!pinchStartDistance) {
+        pinchStartDistance = distance;
+        pinchStartZoom = zoom;
+        return false;
+      }
+
+      const nextZoom = Math.min(3, Math.max(1, pinchStartZoom * (distance / pinchStartDistance)));
+      if (nextZoom !== zoom) {
+        const centerX = ((p.touches as Array<{ x: number; y: number }>)[0].x + (p.touches as Array<{ x: number; y: number }>)[1].x) / 2;
+        const centerY = ((p.touches as Array<{ x: number; y: number }>)[0].y + (p.touches as Array<{ x: number; y: number }>)[1].y) / 2;
+        const worldBefore = screenToWorld(centerX, centerY);
+        zoom = nextZoom;
+        panX = centerX - worldBefore.x * zoom;
+        panY = centerY - worldBefore.y * zoom;
+        clampPan();
+        p.loop();
+      }
+      return false;
+    }
+
+    if (!isPanning) return false;
+    panX = panOriginX + (p.mouseX - panStartMouseX);
+    panY = panOriginY + (p.mouseY - panStartMouseY);
+    clampPan();
+    p.loop();
+    return false;
+  };
+
+  p.touchEnded = () => {
+    isPanning = false;
+    pinchStartDistance = 0;
     return false;
   };
 };
@@ -342,13 +424,19 @@ export default function DigitalExposureArtwork({
       const stageEl = stageRef.current;
       const el = canvasFrameRef.current;
       if (!el) return;
+      const isMobileViewport = window.innerWidth < MOBILE_BREAKPOINT_PX;
 
       let nextWidth = stageEl?.clientWidth || el.clientWidth || width;
       let nextHeight = Math.round(nextWidth / ASPECT_RATIO);
 
+      if (isMobileViewport && stageEl && document.fullscreenElement !== stageEl) {
+        const maxStageHeight = Math.max(320, window.innerHeight * 0.52);
+        nextHeight = Math.round(Math.min(maxStageHeight, nextWidth / 1.2));
+      }
+
       if (stageEl && document.fullscreenElement === stageEl) {
-        const stageWidth = Math.max(480, stageEl.clientWidth - 48);
-        const stageHeight = Math.max(320, stageEl.clientHeight - 140);
+        const stageWidth = Math.max(isMobileViewport ? 280 : 480, stageEl.clientWidth - (isMobileViewport ? 18 : 48));
+        const stageHeight = Math.max(isMobileViewport ? 240 : 320, stageEl.clientHeight - (isMobileViewport ? 180 : 140));
         if (stageWidth / stageHeight > ASPECT_RATIO) {
           nextHeight = stageHeight;
           nextWidth = Math.round(nextHeight * ASPECT_RATIO);
@@ -498,18 +586,18 @@ export default function DigitalExposureArtwork({
 
   return (
     <section className="glass-panel p-4 md:p-6 transition-all duration-300 shadow-2xl border border-white/10 hover:border-white/15 bg-slate-950/40">
-      <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="panel-title text-sm tracking-[0.16em]">EXHIBICION DE CONSTELACION CELESTE DE EXPOSICION DIGITAL</p>
           <p className="text-[11px] text-slate-400 font-mono mt-0.5">
             Una interpretacion artistica de las huellas de datos del perfil @{data.username}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-none sm:flex sm:flex-wrap sm:items-center sm:gap-3">
           <button
             type="button"
             onClick={onToggleMute}
-            className="relative overflow-hidden rounded-lg border border-purple-500/30 bg-black/35 px-4 py-2 text-xs font-semibold text-purple-200 shadow-lg shadow-purple-950/20 backdrop-blur transition-all duration-300 hover:border-purple-500/50 hover:bg-purple-900/30 hover:text-white hover:scale-[1.02] active:scale-[0.98]"
+            className="relative overflow-hidden rounded-lg border border-purple-500/30 bg-black/35 px-4 py-2.5 text-xs font-semibold text-purple-200 shadow-lg shadow-purple-950/20 backdrop-blur transition-all duration-300 hover:border-purple-500/50 hover:bg-purple-900/30 hover:text-white hover:scale-[1.02] active:scale-[0.98]"
           >
             <span className="flex items-center justify-center gap-1.5 font-mono">
               <svg className="h-3.5 w-3.5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -526,7 +614,7 @@ export default function DigitalExposureArtwork({
           <button
             type="button"
             onClick={handleFullscreen}
-            className="relative overflow-hidden rounded-lg border border-purple-500/30 bg-purple-950/40 px-4 py-2 text-xs font-semibold text-purple-200 shadow-lg shadow-purple-950/20 backdrop-blur transition-all duration-300 hover:border-purple-500/50 hover:bg-purple-900/40 hover:text-white hover:scale-[1.02] active:scale-[0.98]"
+            className="relative overflow-hidden rounded-lg border border-purple-500/30 bg-purple-950/40 px-4 py-2.5 text-xs font-semibold text-purple-200 shadow-lg shadow-purple-950/20 backdrop-blur transition-all duration-300 hover:border-purple-500/50 hover:bg-purple-900/40 hover:text-white hover:scale-[1.02] active:scale-[0.98]"
           >
             <span className="flex items-center justify-center gap-1.5 font-mono">
               <svg className="h-3.5 w-3.5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -539,7 +627,7 @@ export default function DigitalExposureArtwork({
           <button
             type="button"
             onClick={handleExport}
-            className="relative overflow-hidden rounded-lg border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 px-4 py-2 text-xs font-semibold text-purple-200 shadow-lg shadow-purple-950/20 backdrop-blur transition-all duration-300 hover:border-purple-500/50 hover:from-purple-500/20 hover:to-indigo-500/20 hover:text-white hover:shadow-purple-500/10 hover:scale-[1.02] active:scale-[0.98]"
+            className="relative overflow-hidden rounded-lg border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 px-4 py-2.5 text-xs font-semibold text-purple-200 shadow-lg shadow-purple-950/20 backdrop-blur transition-all duration-300 hover:border-purple-500/50 hover:from-purple-500/20 hover:to-indigo-500/20 hover:text-white hover:shadow-purple-500/10 hover:scale-[1.02] active:scale-[0.98]"
           >
             <span className="flex items-center justify-center gap-1.5 font-mono">
               <svg className="h-3.5 w-3.5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -556,7 +644,7 @@ export default function DigitalExposureArtwork({
           <div ref={stageRef} className={`fullscreen-stage ${isFullscreen ? "is-fullscreen" : ""}`}>
           <div
             ref={canvasFrameRef}
-            className="fullscreen-canvas-wrapper aspect-video w-full overflow-hidden rounded-xl border border-white/10 bg-[#030408] shadow-inner"
+            className="fullscreen-canvas-wrapper w-full overflow-hidden rounded-xl border border-white/10 bg-[#030408] shadow-inner"
             style={isFullscreen ? { width: `${canvasSize.width}px`, height: `${canvasSize.height}px`, maxWidth: "100%" } : undefined}
           >
             <ReactP5Wrapper
@@ -596,6 +684,10 @@ export default function DigitalExposureArtwork({
             </div>
           ) : null}
           </div>
+
+          <p className="mt-3 text-[10px] font-mono uppercase tracking-[0.18em] text-slate-500 md:hidden">
+            Toca un planeta para inspeccionarlo. Usa dos dedos para zoom en pantalla completa.
+          </p>
 
           {!isFullscreen ? (
             <TimelineControls

@@ -208,6 +208,7 @@
 canvas {
   max-width: 100% !important;
   height: auto !important;
+  touch-action: none;
 }
 
 /* ── Fullscreen Canvas Styling ─────────────────────────── */
@@ -233,6 +234,7 @@ canvas {
 .fullscreen-stage:fullscreen {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: #000000;
@@ -253,4 +255,26 @@ canvas {
   right: 24px;
   bottom: 20px;
   z-index: 20;
+}
+
+@media (max-width: 767px) {
+  .btn-cosmic,
+  .btn-cosmic-solid {
+    padding: 0.8rem 1.2rem;
+    letter-spacing: 0.14em;
+  }
+
+  .fullscreen-stage:fullscreen {
+    padding: 12px;
+  }
+
+  .fullscreen-stage:fullscreen .fullscreen-canvas-wrapper {
+    border-radius: 0.9rem !important;
+  }
+
+  .fullscreen-stage__controls {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
 }

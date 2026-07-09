@@ -7,7 +7,7 @@ type HoverInfoPanelProps = {
 export default function HoverInfoPanel({ star }: HoverInfoPanelProps) {
   if (!star) {
     return (
-      <div className="w-[320px] flex-shrink-0 rounded-xl bg-[#050712]/80 p-5 shadow-inner">
+      <div className="w-full xl:w-[320px] xl:flex-shrink-0 rounded-xl bg-[#050712]/80 p-4 sm:p-5 shadow-inner">
         <p className="text-sm text-slate-400 font-mono tracking-wide">
           Hover a planet to inspect its source post
         </p>
@@ -27,7 +27,7 @@ export default function HoverInfoPanel({ star }: HoverInfoPanelProps) {
   const caption = (post.caption || "No caption").replace(/\s+/g, " ").trim();
 
   return (
-    <div className="w-[320px] flex-shrink-0 rounded-xl bg-[#050712]/80 overflow-hidden shadow-inner">
+    <div className="w-full xl:w-[320px] xl:flex-shrink-0 rounded-xl bg-[#050712]/80 overflow-hidden shadow-inner">
       <div className="p-4">
         <div className="space-y-1.5 font-mono text-xs">
           <p className="text-slate-400">
