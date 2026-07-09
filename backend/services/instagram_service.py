@@ -46,9 +46,12 @@ class InstagramService:
             return "not_found"
         return "unknown"
 
-    async def get_profile_metadata(self, username: str, posts_limit: int = 12) -> dict[str, Any]:
+    async def get_raw_posts(self, username: str, limit: int = 12) -> list[dict[str, Any]]:
         safe_username = clean_instagram_username(username)
-        posts = await fetch_instagram_posts(safe_username, limit=posts_limit)
+        return await fetch_instagram_posts(safe_username, limit=limit)
+
+    def build_profile_metadata_from_raw_posts(self, username: str, posts: list[dict[str, Any]]) -> dict[str, Any]:
+        safe_username = clean_instagram_username(username)
         if not posts:
             raise ValueError("No se encontraron posts publicos para este perfil.")
 
@@ -64,9 +67,7 @@ class InstagramService:
             "source": "apify",
         }
 
-    async def get_recent_posts(self, username: str, limit: int = 12) -> list[dict[str, Any]]:
-        safe_username = clean_instagram_username(username)
-        posts = await fetch_instagram_posts(safe_username, limit=limit)
+    def normalize_recent_posts(self, posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not posts:
             return []
 
@@ -87,6 +88,16 @@ class InstagramService:
                 }
             )
         return normalized
+
+    async def get_profile_metadata(self, username: str, posts_limit: int = 12) -> dict[str, Any]:
+        safe_username = clean_instagram_username(username)
+        posts = await fetch_instagram_posts(safe_username, limit=posts_limit)
+        return self.build_profile_metadata_from_raw_posts(safe_username, posts)
+
+    async def get_recent_posts(self, username: str, limit: int = 12) -> list[dict[str, Any]]:
+        safe_username = clean_instagram_username(username)
+        posts = await fetch_instagram_posts(safe_username, limit=limit)
+        return self.normalize_recent_posts(posts)
 
     async def analyze_posts(self, posts: list[dict[str, Any]], followers_count: int | None = None) -> dict[str, Any]:
         payload = [

@@ -111,7 +111,40 @@ APIFY_TOKEN=your_apify_token_here
 APIFY_ACTOR_ID=apify~instagram-scraper
 APIFY_POSTS_LIMIT=12
 APIFY_TIMEOUT_SECONDS=180
+ANALYZE_USE_MOCK=false
+ANALYZE_MOCK_DELAY_MS=500
+ANALYZE_MOCK_POSTS=50
 ```
+
+## Stress test sin Apify
+
+Para hacer pruebas de carga sin tocar Apify, activa el modo mock en `backend/.env`:
+
+```bash
+ANALYZE_USE_MOCK=true
+ANALYZE_MOCK_DELAY_MS=500
+ANALYZE_MOCK_POSTS=50
+```
+
+Eso hace que `POST /analyze-profile` devuelva un payload local con el mismo formato del endpoint real, pero sin llamadas externas.
+
+Script incluido:
+
+- `tests/stress/analyze-profile.k6.js`
+
+Ejemplo con `k6`:
+
+```bash
+k6 run tests/stress/analyze-profile.k6.js
+```
+
+Opcionalmente:
+
+```bash
+BASE_URL=http://localhost:8000 LIMIT=50 USERNAME_PREFIX=stress.demo k6 run tests/stress/analyze-profile.k6.js
+```
+
+El script lanza 10 usuarios concurrentes durante 1 minuto y verifica que el endpoint responda con status `200` y con un payload valido.
 
 ## Deploy rapido con Docker Compose
 

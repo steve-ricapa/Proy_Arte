@@ -7,6 +7,28 @@ import useArtworkAudio from "../components/artwork/audio/useArtworkAudio";
 import { createSamplePayload } from "../samplePayload";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
+const PENDING_ANALYZE_STORAGE_KEY = "pending-analyze-request";
+
+const savePendingAnalyzeRequest = (request) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PENDING_ANALYZE_STORAGE_KEY, JSON.stringify(request));
+};
+
+const readPendingAnalyzeRequest = () => {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(PENDING_ANALYZE_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const clearPendingAnalyzeRequest = () => {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(PENDING_ANALYZE_STORAGE_KEY);
+};
 
 export default function ExperiencePage({ onBack }) {
   const { armAudio, playBirthSound, playExplosionSound, isMuted, toggleMute } = useArtworkAudio();
@@ -14,6 +36,7 @@ export default function ExperiencePage({ onBack }) {
   const [message, setMessage] = useState("Ingresa un username para crear una obra generativa.");
   const [payload, setPayload] = useState(null);
   const [extractorStatus, setExtractorStatus] = useState(null);
+  const [pendingAnalyzeRequest, setPendingAnalyzeRequest] = useState(() => readPendingAnalyzeRequest());
 
   const refreshExtractorStatus = async () => {
     try {
@@ -28,18 +51,68 @@ export default function ExperiencePage({ onBack }) {
     refreshExtractorStatus();
   }, []);
 
-  const handleAnalyze = async (username, limit) => {
+  useEffect(() => {
+    if (!pendingAnalyzeRequest || status === "cargando") return;
+    const ageMs = Date.now() - Number(pendingAnalyzeRequest.startedAt || 0);
+    if (ageMs > 1000 * 60 * 5) {
+      clearPendingAnalyzeRequest();
+      setPendingAnalyzeRequest(null);
+      return;
+    }
+
+    handleAnalyze(pendingAnalyzeRequest.username, pendingAnalyzeRequest.limit, { isResume: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleAnalyze = async (username, limit, options = {}) => {
+    const normalizedLimit = Math.max(1, Math.min(100, Number(limit) || 50));
+    const fingerprint = `${username}:${normalizedLimit}`;
+    if (status === "cargando" && pendingAnalyzeRequest?.fingerprint === fingerprint) {
+      console.info("[analyze] duplicate request skipped", { username, limit: normalizedLimit, reason: "same-fingerprint-loading" });
+      return;
+    }
+
     armAudio();
     setStatus("cargando");
-    setMessage("Recolectando huellas digitales del perfil...");
+    setMessage(options.isResume ? "Reanudando analisis pendiente..." : "Recolectando huellas digitales del perfil...");
     setPayload(null);
+    const startedAt = performance.now();
+    const pendingRequest = {
+      username,
+      limit: normalizedLimit,
+      fingerprint,
+      startedAt: Date.now(),
+    };
+    setPendingAnalyzeRequest(pendingRequest);
+    savePendingAnalyzeRequest(pendingRequest);
+
+    console.info("[analyze] request start", { username, limit: normalizedLimit, resumed: Boolean(options.isResume) });
 
     try {
-      const response = await axios.post(`${API_BASE}/analyze-profile`, { username, limit });
+      const response = await axios.post(`${API_BASE}/analyze-profile`, { username, limit: normalizedLimit });
+      console.info("[analyze] request success", {
+        username,
+        limit: normalizedLimit,
+        status: response.status,
+        durationMs: Math.round(performance.now() - startedAt),
+        posts: response.data?.posts?.length ?? 0,
+      });
+      clearPendingAnalyzeRequest();
+      setPendingAnalyzeRequest(null);
       setPayload(response.data);
       setStatus("terminado");
       setMessage("Payload completo recibido. La constelacion ya puede dibujarse.");
     } catch (error) {
+      console.error("[analyze] request error", {
+        username,
+        limit: normalizedLimit,
+        status: error?.response?.status,
+        durationMs: Math.round(performance.now() - startedAt),
+        message: error?.message,
+        detail: error?.response?.data,
+      });
+      clearPendingAnalyzeRequest();
+      setPendingAnalyzeRequest(null);
       setStatus("error");
       setMessage(error?.response?.data?.detail || error?.message || "No se pudo analizar el perfil.");
       await refreshExtractorStatus();
@@ -118,6 +191,8 @@ export default function ExperiencePage({ onBack }) {
           <button
             type="button"
             onClick={() => {
+              clearPendingAnalyzeRequest();
+              setPendingAnalyzeRequest(null);
               armAudio();
               setPayload(createSamplePayload());
               setStatus("terminado");

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from collections import Counter
+import logging
 import re
+from time import perf_counter
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 
 from core import config
+
+
+logger = logging.getLogger(__name__)
 
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
@@ -59,23 +64,40 @@ async def run_apify_instagram_scraper(payload: dict[str, Any]) -> list[dict[str,
         "Accept": "application/json",
     }
 
+    started = perf_counter()
+    logger.info(
+        "apify.request.start actor_id=%s results_limit=%s timeout_s=%s direct_urls=%s",
+        config.APIFY_ACTOR_ID,
+        payload.get("resultsLimit"),
+        config.APIFY_TIMEOUT_SECONDS,
+        payload.get("directUrls"),
+    )
+
     try:
         async with httpx.AsyncClient(timeout=config.APIFY_TIMEOUT_SECONDS) as client:
             response = await client.post(url, json=payload, headers=headers)
     except httpx.TimeoutException as exc:
+        logger.error(
+            "apify.request.timeout results_limit=%s duration_ms=%s",
+            payload.get("resultsLimit"),
+            round((perf_counter() - started) * 1000),
+        )
         raise ApifyServiceError(
             "La extraccion tardo demasiado. Intenta con menos posts.",
             status_code=504,
             error_type="timeout",
         ) from exc
     except httpx.HTTPError as exc:
+        logger.exception("apify.request.network_error results_limit=%s", payload.get("resultsLimit"))
         raise ApifyServiceError("Error consultando Apify.", status_code=502, error_type="network") from exc
 
     if response.status_code in {401, 403}:
+        logger.error("apify.request.auth_error status=%s", response.status_code)
         raise ApifyServiceError("Apify token invalido o sin permisos.", status_code=502, error_type="auth")
 
     if response.status_code not in {200, 201}:
         safe_text = response.text[:500]
+        logger.error("apify.request.upstream_error status=%s detail=%s", response.status_code, safe_text)
         raise ApifyServiceError(
             f"Error consultando Apify. status={response.status_code} detail={safe_text}",
             status_code=502,
@@ -84,7 +106,15 @@ async def run_apify_instagram_scraper(payload: dict[str, Any]) -> list[dict[str,
 
     data = response.json()
     if not isinstance(data, list):
+        logger.error("apify.request.invalid_output type=%s", type(data).__name__)
         raise ApifyServiceError("Respuesta invalida de Apify (no es lista).", status_code=502, error_type="invalid_output")
+
+    logger.info(
+        "apify.request.success status=%s items=%s duration_ms=%s",
+        response.status_code,
+        len(data),
+        round((perf_counter() - started) * 1000),
+    )
 
     return data
 

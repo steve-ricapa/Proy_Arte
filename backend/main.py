@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -10,6 +11,13 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
 from routes.analyze import get_analyze_router
 from services.pipeline_service import PipelineService
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 app = FastAPI(title="Instagram Artistic Analyzer", version="1.0.0")
@@ -31,6 +39,8 @@ app.add_middleware(
 pipeline_service = PipelineService()
 
 app.include_router(get_analyze_router(pipeline_service), tags=["analyze"])
+
+logger.info("application.start title=%s version=%s", app.title, app.version)
 
 
 @app.get("/health")
